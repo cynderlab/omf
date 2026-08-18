@@ -48,3 +48,29 @@ def test_llm_payload_builder_excludes_map_and_raw():
     assert "token_map" not in blob
     assert "10.1.2.3" not in blob
     assert "raw" not in payload
+
+
+def test_ipv6_mapped_and_embedded_not_leaked():
+    r = Redactor()
+    for addr in ("::ffff:10.0.0.1", "2001:db8::10.0.0.1"):
+        out = r.redact_text(f"peer {addr}")
+        assert addr not in out
+        assert "10.0.0.1" not in out
+        assert "::ffff:" not in out
+        assert "2001:db8::" not in out
+        assert r.destokenize(out) == f"peer {addr}"
+
+
+def test_same_value_same_token_across_kinds():
+    r = Redactor()
+    user = r.redact_obj({"name": "shared"})
+    comm = r.redact_obj({"communities": [{"name": "shared"}]})
+    assert user["name"] == "[USER_1]"
+    assert comm["communities"][0]["name"] == "[USER_1]"
+
+    r2 = Redactor()
+    ip_out = r2.redact_text("10.0.0.9")
+    name_out = r2.redact_obj({"name": "10.0.0.9"})
+    assert ip_out == "[IP_1]"
+    assert name_out["name"] == "[IP_1]"
+    assert r2.destokenize(name_out["name"]) == "10.0.0.9"

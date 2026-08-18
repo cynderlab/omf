@@ -15,24 +15,34 @@ _USER_KEYS = frozenset({"name", "username"})
 _SERIAL_KEYS = frozenset({"serial", "serial_number"})
 _COMMUNITY_PARENTS = frozenset({"communities", "community"})
 
-_URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
-_IPV4_RE = re.compile(
-    r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
-    r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
+_H = r"[0-9A-Fa-f]{1,4}"
+_V4 = (
+    r"(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
+    r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?)"
 )
-# Compressed and full IPv6; avoid matching bare hex that is not address-like.
+
+_URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+_IPV4_RE = re.compile(rf"\b{_V4}\b")
+# IPv4-tail forms first so ::ffff:10.0.0.1 is not split into prefix + dotted quad.
 _IPV6_RE = re.compile(
-    r"(?<![0-9A-Fa-f:])(?:"
-    r"(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}"
-    r"|(?:[0-9A-Fa-f]{1,4}:){1,7}:"
-    r"|:(?::[0-9A-Fa-f]{1,4}){1,7}"
-    r"|(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}"
-    r"|(?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}"
-    r"|(?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}"
-    r"|(?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}"
-    r"|(?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}"
-    r"|[0-9A-Fa-f]{1,4}:(?::[0-9A-Fa-f]{1,4}){1,6}"
-    r")(?![0-9A-Fa-f:])"
+    rf"(?<![0-9A-Fa-f:])(?:"
+    rf"(?:{_H}:){{6}}{_V4}"
+    rf"|::(?:{_H}:){{5}}{_V4}"
+    rf"|(?:{_H})?::(?:{_H}:){{0,4}}{_V4}"
+    rf"|(?:{_H}:){_H}?::(?:{_H}:){{0,3}}{_V4}"
+    rf"|(?:{_H}:){{2}}{_H}?::(?:{_H}:){{0,2}}{_V4}"
+    rf"|(?:{_H}:){{3}}{_H}?::(?:{_H}:){{0,1}}{_V4}"
+    rf"|(?:{_H}:){{4}}{_H}?::{_V4}"
+    rf"|(?:{_H}:){{7}}{_H}"
+    rf"|(?:{_H}:){{1,7}}:"
+    rf"|:(?::{_H}){{1,7}}"
+    rf"|(?:{_H}:){{1,6}}:{_H}"
+    rf"|(?:{_H}:){{1,5}}(?::{_H}){{1,2}}"
+    rf"|(?:{_H}:){{1,4}}(?::{_H}){{1,3}}"
+    rf"|(?:{_H}:){{1,3}}(?::{_H}){{1,4}}"
+    rf"|(?:{_H}:){{1,2}}(?::{_H}){{1,5}}"
+    rf"|{_H}:(?::{_H}){{1,6}}"
+    rf")(?![0-9A-Fa-f:])"
 )
 _HOSTNAME_RE = re.compile(
     r"\b(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
@@ -44,7 +54,8 @@ _TOKEN_RE = re.compile(r"\[[A-Z]+_\d+\]")
 
 class Redactor:
     def __init__(self) -> None:
-        self._forward: dict[tuple[str, str], str] = {}
+        # Same original value → same token (kind only picks the prefix on first sight).
+        self._forward: dict[str, str] = {}
         self._reverse: dict[str, str] = {}
         self._counters: dict[str, int] = {}
 
@@ -96,14 +107,13 @@ class Redactor:
         return dict(self._reverse)
 
     def _tokenize(self, kind: str, original: str) -> str:
-        key = (kind, original)
-        existing = self._forward.get(key)
+        existing = self._forward.get(original)
         if existing is not None:
             return existing
         n = self._counters.get(kind, 0) + 1
         self._counters[kind] = n
         token = f"[{kind}_{n}]"
-        self._forward[key] = token
+        self._forward[original] = token
         self._reverse[token] = original
         return token
 
