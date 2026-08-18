@@ -14,6 +14,7 @@ from omf.baseline.evaluators.admin import (
     timezone_set,
     tls_versions_allowed,
 )
+from omf.baseline.evaluators.ha import ha_monitors_set, ha_reserved_mgmt
 from omf.baseline.evaluators.local_in import local_in_present, virtual_patch_on_accept
 from omf.baseline.evaluators.logging import (
     faz_encrypted,
@@ -74,6 +75,8 @@ REGISTRY: dict[str, Evaluator] = {
     "intrazone_denied": intrazone_denied,
     "local_in_present": local_in_present,
     "virtual_patch_on_accept": virtual_patch_on_accept,
+    "ha_monitors_set": ha_monitors_set,
+    "ha_reserved_mgmt": ha_reserved_mgmt,
 }
 
 

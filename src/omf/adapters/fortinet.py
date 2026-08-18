@@ -14,6 +14,7 @@ from omf.schema.capabilities import (
     ALL_CAPABILITIES,
     AdminSettings,
     DnsConfig,
+    HaConfig,
     Listen,
     LocalInPolicy,
     LocalInPolicyList,
@@ -367,6 +368,41 @@ def forti_local_in(raw: object, raw6: object | None = None) -> LocalInPolicyList
     return LocalInPolicyList(policies=tuple(policies))
 
 
+_HA_SECRET_KEYS = frozenset({"password", "passwd", "secret"})
+
+
+def _drop_secrets(obj: object) -> object:
+    if isinstance(obj, dict):
+        return {k: _drop_secrets(v) for k, v in obj.items() if str(k).lower() not in _HA_SECRET_KEYS}
+    if isinstance(obj, list):
+        return [_drop_secrets(v) for v in obj]
+    return obj
+
+
+def forti_ha(raw: object) -> HaConfig:
+    item = _as_record(_drop_secrets(raw))
+    monitors = _tokens(item.get("monitor"))
+    mgmt = item.get("ha-mgmt-interfaces")
+    ifaces: list[str] = []
+    for entry in _as_records(mgmt) if not isinstance(mgmt, dict) else [mgmt]:
+        name = entry.get("interface") or entry.get("name")
+        if name not in (None, ""):
+            ifaces.append(str(name))
+    if isinstance(mgmt, (list, tuple)):
+        for entry in mgmt:
+            if isinstance(entry, dict):
+                name = entry.get("interface") or entry.get("name")
+                if name not in (None, ""):
+                    ifaces.append(str(name))
+    mode = str(item.get("mode") or "standalone").strip().lower()
+    return HaConfig(
+        mode=mode,
+        monitor_interfaces=monitors,
+        ha_mgmt_status=_as_bool(item.get("ha-mgmt-status"), default=False),
+        ha_mgmt_interfaces=tuple(dict.fromkeys(ifaces)),
+    )
+
+
 def forti_ntp(raw: object) -> NtpConfig:
     item = _as_record(raw)
     return NtpConfig(
@@ -633,6 +669,9 @@ class FortinetAdapter:
                 if local_in6_raw is not None:
                     raw["/api/v2/cmdb/firewall/local-in-policy6"] = local_in6_raw
                 payload = forti_local_in(local_in_raw, local_in6_raw)
+            elif capability == "ha":
+                raw = _drop_secrets(self._get("/api/v2/cmdb/system/ha", capability=capability))
+                payload = forti_ha(raw)
             elif capability == "system_info":
                 raw = self._get("/api/v2/monitor/system/status", capability=capability)
                 payload = forti_system(raw)
@@ -765,6 +804,7 @@ __all__ = [
     "forti_admin_settings",
     "forti_dns",
     "forti_filter",
+    "forti_ha",
     "forti_local_in",
     "forti_logging",
     "forti_ntp",

@@ -10,6 +10,7 @@ from omf.baseline.evaluators.admin import (
     tls_versions_allowed,
 )
 from omf.baseline.evaluators.logging import faz_encrypted, syslog_encrypted
+from omf.baseline.evaluators.ha import ha_monitors_set, ha_reserved_mgmt
 from omf.baseline.evaluators.local_in import local_in_present, virtual_patch_on_accept
 from omf.baseline.evaluators.network import intrazone_denied
 from omf.baseline.evaluators.policy import (
@@ -21,6 +22,7 @@ from omf.baseline.evaluators.services import wan_mgmt_disabled
 from omf.baseline.evaluators.snmp import snmp_memory_traps, snmp_not_legacy
 from omf.schema.capabilities import (
     AdminSettings,
+    HaConfig,
     LocalInPolicy,
     LocalInPolicyList,
     LoggingConfig,
@@ -326,4 +328,31 @@ def test_local_in_present_and_virtual_patch():
         ),
     )
     assert virtual_patch_on_accept({"local_in": patched}, {}, "fortinet").status == "pass"
+
+
+def test_ha_checks_standalone_and_active():
+    standalone = ev("ha", HaConfig(mode="standalone"))
+    assert ha_monitors_set({"ha": standalone}, {}, "fortinet").status == "pass"
+    assert ha_reserved_mgmt({"ha": standalone}, {}, "fortinet").status == "pass"
+    empty_mon = ev(
+        "ha",
+        HaConfig(mode="a-p", monitor_interfaces=(), ha_mgmt_status=True, ha_mgmt_interfaces=("port6",)),
+    )
+    assert ha_monitors_set({"ha": empty_mon}, {}, "fortinet").status == "fail"
+    no_mgmt = ev(
+        "ha",
+        HaConfig(mode="a-p", monitor_interfaces=("port6",), ha_mgmt_status=False, ha_mgmt_interfaces=()),
+    )
+    assert ha_reserved_mgmt({"ha": no_mgmt}, {}, "fortinet").status == "fail"
+    ok = ev(
+        "ha",
+        HaConfig(
+            mode="a-p",
+            monitor_interfaces=("port6", "port7"),
+            ha_mgmt_status=True,
+            ha_mgmt_interfaces=("port6",),
+        ),
+    )
+    assert ha_monitors_set({"ha": ok}, {}, "fortinet").status == "pass"
+    assert ha_reserved_mgmt({"ha": ok}, {}, "fortinet").status == "pass"
 

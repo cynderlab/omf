@@ -354,6 +354,28 @@ checks:
     mitigation:
       generic: "Enable virtual patch on every accept local-in policy."
       fortinet: "On every accept local-in policy, set virtual-patch enable."
+  - id: FW-HA-001
+    title: HA monitor interfaces are set
+    severity: medium
+    applies_to: [fortinet]
+    needs: [ha]
+    evaluator: ha_monitors_set
+    params:
+      default: {}
+    mitigation:
+      generic: "Configure HA monitor interfaces when HA is enabled."
+      fortinet: "In config system ha, set monitor to at least one interface."
+  - id: FW-HA-002
+    title: HA reserved management is configured
+    severity: medium
+    applies_to: [fortinet]
+    needs: [ha]
+    evaluator: ha_reserved_mgmt
+    params:
+      default: {}
+    mitigation:
+      generic: "Enable HA reserved management interfaces when HA is enabled."
+      fortinet: "In config system ha, set ha-mgmt-status enable and configure ha-mgmt-interfaces."
   - id: FW-SYS-001
     title: Firmware version is recorded
     severity: info

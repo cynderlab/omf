@@ -1,0 +1,10 @@
+{
+  "results": {
+    "mode": "a-p",
+    "group-name": "FGT-HA",
+    "password": "super-secret",
+    "monitor": "port6 port7",
+    "ha-mgmt-status": "enable",
+    "ha-mgmt-interfaces": [{"interface": "port6", "gateway": "10.10.10.1"}]
+  }
+}

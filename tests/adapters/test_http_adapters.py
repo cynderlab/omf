@@ -275,6 +275,7 @@ def test_fortinet_collect_capabilities():
         "/api/v2/cmdb/firewall/policy": "policy.json",
         "/api/v2/cmdb/system/zone": "zone.json",
         "/api/v2/cmdb/firewall/local-in-policy": "local_in_policy.json",
+        "/api/v2/cmdb/system/ha": "ha.json",
         "/api/v2/monitor/system/status": "status.json",
     }
 
@@ -315,6 +316,11 @@ def test_fortinet_collect_capabilities():
     assert zones.payload.zones[0].intrazone == "allow"
     local_in, _ = ad.collect("local_in")
     assert local_in.payload.policies[0].virtual_patch is False
+    ha, raw_ha = ad.collect("ha")
+    assert ha.payload.mode == "a-p"
+    assert ha.payload.monitor_interfaces == ("port6", "port7")
+    assert "super-secret" not in str(raw_ha)
+    assert "super-secret" not in str(ha.payload.model_dump())
     system, _ = ad.collect("system_info")
     assert system.payload.firmware.startswith("v7.4")
     assert system.payload.model == "FortiGate"

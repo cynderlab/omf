@@ -157,3 +157,24 @@ def test_local_in_virtual_patch_disabled():
     assert policies[0].virtual_patch is False
 
 
+def test_ha_strips_password_and_reads_monitor():
+    from omf.adapters.fortinet import forti_ha
+    ha = forti_ha(load("ha.json"))
+    assert ha.mode == "a-p"
+    assert ha.monitor_interfaces == ("port6", "port7")
+    assert ha.ha_mgmt_status is True
+    assert ha.ha_mgmt_interfaces == ("port6",)
+    dumped = ha.model_dump()
+    assert "password" not in dumped
+    assert "super-secret" not in str(dumped)
+
+
+def test_ha_standalone_defaults():
+    from omf.adapters.fortinet import forti_ha
+    ha = forti_ha(load("ha_standalone.json"))
+    assert ha.mode == "standalone"
+    assert ha.monitor_interfaces == ()
+    assert ha.ha_mgmt_status is False
+    assert ha.ha_mgmt_interfaces == ()
+
+
