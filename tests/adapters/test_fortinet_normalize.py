@@ -118,3 +118,14 @@ def test_admin_settings_l1_fields():
     assert admin.admin_https_port == 443
     assert admin.admin_https_redirect is True
 
+
+def test_services_on_wan_and_zones():
+    svc = forti_services(load("interface.json"), load("admin.json"))
+    by_name = {s.name: s for s in svc.services}
+    assert by_name["https"].on_wan is True
+    assert by_name["telnet"].on_wan is False
+    from omf.adapters.fortinet import forti_zones
+    zones = forti_zones(load("zone.json"))
+    assert zones.zones[0].name == "DMZ"
+    assert zones.zones[0].intrazone == "allow"
+

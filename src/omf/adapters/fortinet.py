@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any, Literal, NoReturn
@@ -26,6 +27,8 @@ from omf.schema.capabilities import (
     SystemInfo,
     User,
     UserList,
+    Zone,
+    ZoneList,
 )
 from omf.schema.evidence import Evidence
 from omf.session import Session
@@ -44,7 +47,11 @@ _MGMT_PROTOCOLS: tuple[tuple[str, int], ...] = (
     ("http", 80),
     ("telnet", 23),
     ("ftp", 21),
+    ("ping", 0),
+    ("snmp", 161),
+    ("radius-acct", 1813),
 )
+_WAN_NAME = re.compile(r"^wan\d*$", re.IGNORECASE)
 _UNRESTRICTED_TRUSTHOSTS = frozenset({"0.0.0.0 0.0.0.0", "::/0 ::/0"})
 
 
@@ -98,6 +105,13 @@ def _allowaccess_tokens(value: object) -> set[str]:
         text = str(value).replace(",", " ")
         parts = [part.strip().lower() for part in text.split()]
     return {part for part in parts if part}
+
+
+def _is_wan(item: dict[str, Any]) -> bool:
+    role = str(item.get("role") or "").strip().lower()
+    if role == "wan":
+        return True
+    return bool(_WAN_NAME.fullmatch(str(item.get("name") or "").strip()))
 
 
 def _is_trusthost_key(key: object) -> bool:
@@ -301,18 +315,37 @@ def forti_services(interface_raw: object, admin_raw: object) -> ServiceList:
     interfaces = _as_records(interface_raw)
     listen = _services_listen(_as_records(admin_raw))
     enabled_protocols: set[str] = set()
+    wan_protocols: set[str] = set()
     for iface in interfaces:
-        enabled_protocols.update(_allowaccess_tokens(iface.get("allowaccess")))
+        tokens = _allowaccess_tokens(iface.get("allowaccess"))
+        enabled_protocols.update(tokens)
+        if _is_wan(iface):
+            wan_protocols.update(tokens)
     services = [
         Service(
             name=name,
             enabled=name in enabled_protocols,
             port=port,
             listen=listen,
+            on_wan=name in wan_protocols,
         )
         for name, port in _MGMT_PROTOCOLS
     ]
     return ServiceList(services=tuple(services))
+
+
+def forti_zones(raw: object) -> ZoneList:
+    zones = []
+    for item in _as_records(raw):
+        raw_intra = str(item.get("intrazone") or "").strip().lower()
+        if raw_intra in {"allow", "permit"}:
+            intra = "allow"
+        elif raw_intra in {"deny", "block"}:
+            intra = "deny"
+        else:
+            intra = "unknown"
+        zones.append(Zone(name=str(item.get("name") or ""), intrazone=intra))
+    return ZoneList(zones=tuple(zones))
 
 
 def forti_ntp(raw: object) -> NtpConfig:
@@ -458,6 +491,9 @@ class FortinetAdapter:
             elif capability == "firewall_filter":
                 raw = self._get("/api/v2/cmdb/firewall/policy", capability=capability)
                 payload = forti_filter(raw)
+            elif capability == "zones":
+                raw = self._get("/api/v2/cmdb/system/zone", capability=capability)
+                payload = forti_zones(raw)
             elif capability == "system_info":
                 raw = self._get("/api/v2/monitor/system/status", capability=capability)
                 payload = forti_system(raw)
@@ -597,4 +633,5 @@ __all__ = [
     "forti_system",
     "forti_unwrap",
     "forti_users",
+    "forti_zones",
 ]

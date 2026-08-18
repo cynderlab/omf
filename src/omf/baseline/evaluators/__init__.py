@@ -15,9 +15,14 @@ from omf.baseline.evaluators.admin import (
     tls_versions_allowed,
 )
 from omf.baseline.evaluators.logging import local_logging_enabled, remote_syslog_configured
+from omf.baseline.evaluators.network import intrazone_denied
 from omf.baseline.evaluators.ntp_dns import dns_configured, ntp_configured
 from omf.baseline.evaluators.policy import explicit_deny_present, no_any_any_accept
-from omf.baseline.evaluators.services import insecure_services_disabled, services_not_unrestricted
+from omf.baseline.evaluators.services import (
+    insecure_services_disabled,
+    services_not_unrestricted,
+    wan_mgmt_disabled,
+)
 from omf.baseline.evaluators.snmp import no_default_snmp_community, snmp_not_legacy
 from omf.baseline.evaluators.system import firmware_present
 from omf.baseline.loader import CheckDef, resolve_params
@@ -38,6 +43,7 @@ REGISTRY: dict[str, Evaluator] = {
     "admin_ports_changed": admin_ports_changed,
     "insecure_services_disabled": insecure_services_disabled,
     "services_not_unrestricted": services_not_unrestricted,
+    "wan_mgmt_disabled": wan_mgmt_disabled,
     "ntp_configured": ntp_configured,
     "dns_configured": dns_configured,
     "local_logging_enabled": local_logging_enabled,
@@ -47,6 +53,7 @@ REGISTRY: dict[str, Evaluator] = {
     "no_any_any_accept": no_any_any_accept,
     "explicit_deny_present": explicit_deny_present,
     "firmware_present": firmware_present,
+    "intrazone_denied": intrazone_denied,
 }
 
 

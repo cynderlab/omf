@@ -270,6 +270,7 @@ def test_fortinet_collect_capabilities():
         "/api/v2/cmdb/system/snmp/community": "snmp_community.json",
         "/api/v2/cmdb/system/snmp/sysinfo": "snmp_sysinfo.json",
         "/api/v2/cmdb/firewall/policy": "policy.json",
+        "/api/v2/cmdb/system/zone": "zone.json",
         "/api/v2/monitor/system/status": "status.json",
     }
 
@@ -294,6 +295,7 @@ def test_fortinet_collect_capabilities():
     by_name = {s.name: s for s in services.payload.services}
     assert by_name["https"].enabled is True
     assert by_name["https"].listen == "unknown"
+    assert by_name["https"].on_wan is True
     ntp, _ = ad.collect("ntp")
     assert ntp.payload.enabled is True
     dns, _ = ad.collect("dns")
@@ -304,6 +306,9 @@ def test_fortinet_collect_capabilities():
     assert snmp.payload.communities[0].name == "public"
     policies, _ = ad.collect("firewall_filter")
     assert policies.payload.policies[0].src == ("any",)
+    zones, _ = ad.collect("zones")
+    assert zones.payload.zones[0].name == "DMZ"
+    assert zones.payload.zones[0].intrazone == "allow"
     system, _ = ad.collect("system_info")
     assert system.payload.firmware.startswith("v7.4")
     assert system.payload.model == "FortiGate"

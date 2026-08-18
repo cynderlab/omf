@@ -159,6 +159,28 @@ checks:
       default: {}
     mitigation:
       generic: "Restrict management services to trusted addresses or interfaces."
+  - id: FW-SVC-003
+    title: WAN interfaces have no management services
+    severity: high
+    applies_to: [fortinet]
+    needs: [services]
+    evaluator: wan_mgmt_disabled
+    params:
+      default: {}
+    mitigation:
+      generic: "Disable administrative access on WAN interfaces."
+      fortinet: "On each WAN interface, unselect allowaccess for ping, https, http, ssh, snmp, and radius-acct. Manage the device from a dedicated interface."
+  - id: FW-NET-001
+    title: Intra-zone traffic is denied
+    severity: medium
+    applies_to: [fortinet]
+    needs: [zones]
+    evaluator: intrazone_denied
+    params:
+      default: {}
+    mitigation:
+      generic: "Do not allow unrestricted traffic between interfaces in the same zone."
+      fortinet: "In config system zone, set intrazone deny on each zone (GUI: Block intra-zone traffic)."
   - id: FW-NTP-001
     title: NTP is enabled with at least one server
     severity: medium

@@ -1,3 +1,4 @@
 forbidden_services: [telnet, ftp, http]
 mgmt_services: [https, ssh, http, telnet]
 default_hostnames: ["FortiGate", ""]
+wan_mgmt: [https, http, ping, ssh, snmp, radius-acct]

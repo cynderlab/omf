@@ -9,7 +9,9 @@ from omf.baseline.evaluators.admin import (
     timezone_set,
     tls_versions_allowed,
 )
-from omf.schema.capabilities import AdminSettings
+from omf.baseline.evaluators.network import intrazone_denied
+from omf.baseline.evaluators.services import wan_mgmt_disabled
+from omf.schema.capabilities import AdminSettings, Service, ServiceList, Zone, ZoneList
 from omf.schema.evidence import Evidence
 
 
@@ -77,3 +79,29 @@ def test_admin_ports_and_cpu_flag():
     good = settings(admin_http_port=8082, admin_https_port=4343, admin_https_redirect=False, log_single_cpu_high=True)
     assert admin_ports_changed({"admin_settings": good}, {"forbidden_http": 80, "forbidden_https": 443}, "fortinet").status == "pass"
     assert flag_enabled({"admin_settings": good}, {"field": "log_single_cpu_high"}, "fortinet").status == "pass"
+
+
+def test_wan_mgmt_disabled_fails_for_https_on_wan():
+    services = ev(
+        "services",
+        ServiceList(
+            services=(
+                Service(name="https", enabled=True, port=443, listen="restricted", on_wan=True),
+                Service(name="telnet", enabled=False, port=23, listen="unknown", on_wan=False),
+            )
+        ),
+    )
+    r = wan_mgmt_disabled(
+        {"services": services},
+        {"wan_mgmt": ["https", "http", "ping", "ssh", "snmp", "radius-acct"]},
+        "fortinet",
+    )
+    assert r.status == "fail"
+    assert "https" in r.observed["names"]
+
+
+def test_intrazone_denied_fail_allow_pass_deny():
+    allow = ev("zones", ZoneList(zones=(Zone(name="DMZ", intrazone="allow"),)))
+    deny = ev("zones", ZoneList(zones=(Zone(name="DMZ", intrazone="deny"),)))
+    assert intrazone_denied({"zones": allow}, {}, "fortinet").status == "fail"
+    assert intrazone_denied({"zones": deny}, {}, "fortinet").status == "pass"
