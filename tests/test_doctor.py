@@ -1,5 +1,5 @@
 # tests/test_doctor.py
-from omf.doctor import run_doctor_checks
+from omf.doctor import run, run_doctor_checks
 
 
 def test_all_required_ok_llm_missing_is_warn_exit_zero():
@@ -71,3 +71,22 @@ def test_bad_api_style_is_warn():
         env_file_exists=True,
     )
     assert any("WARN     OMF_LLM_API_STYLE" in line for line in lines)
+
+
+def test_run_reads_dotenv_without_printing_secrets(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "OMF_LLM_BASE_URL=https://example.invalid/v1\n"
+        "OMF_LLM_API_KEY=sk-test-not-real\n"
+        "OMF_LLM_MODEL=demo\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("omf.doctor.shutil.which", lambda _name: "/uv")
+    assert run() == 0
+    out = capsys.readouterr().out
+    assert "OK       env-file" in out
+    assert "OK       OMF_LLM_BASE_URL" in out
+    assert "OK       OMF_LLM_API_KEY  set" in out
+    assert "OK       OMF_LLM_MODEL" in out
+    assert "sk-test-not-real" not in out
+    assert "example.invalid" not in out

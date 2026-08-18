@@ -1,3 +1,5 @@
+"""Analysis half: redacted-only tools, Pydantic AI agent, Markdown report."""
+
 from omf.agent.report import finalize_report, skeleton_body, wrap_report
 
 __all__ = [

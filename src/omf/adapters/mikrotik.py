@@ -1,3 +1,5 @@
+"""MikroTik RouterOS 7+ REST adapter (`/rest/...`, HTTP Basic)."""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,7 @@ import httpx
 
 from omf.adapters.base import CollectError, ProbeError
 from omf.adapters.normalize import as_any_token
+from omf.log import get_logger, http_target
 from omf.schema.capabilities import (
     ALL_CAPABILITIES,
     AdminSettings,
@@ -30,6 +33,10 @@ from omf.schema.capabilities import (
 from omf.schema.evidence import Evidence
 from omf.session import Session
 
+# Official RouterOS REST API (www/www-ssl), not the binary API on 8728/8729:
+# https://help.mikrotik.com/docs/spaces/ROS/pages/47579162/REST+API
+
+_log = get_logger("omf.http")
 _TIMEOUT_RE = re.compile(r"^(\d+)([smhSMH])?$")
 _TRUE = frozenset({"true", "yes", "1", "on"})
 _FALSE = frozenset({"false", "no", "0", "off", ""})
@@ -342,17 +349,25 @@ class MikrotikAdapter:
             response = self._client.request(
                 method,
                 path,
-                auth=httpx.BasicAuth(self._session.username, self._session.password),
+                auth=httpx.BasicAuth(self._session.username, self._session.password),  # AuthScheme "basic"
             )
             status = response.status_code
             return response
         finally:
+            elapsed = int((time.perf_counter() - started) * 1000)
             self.last_call = {
                 "method": method,
                 "path": path,
                 "status": status,
-                "ms": int((time.perf_counter() - started) * 1000),
+                "ms": elapsed,
             }
+            _log.debug(
+                "%s %s -> %s (%sms)",
+                method,
+                http_target(self._client.base_url, path),
+                status,
+                elapsed,
+            )
 
     def _get(self, path: str, *, capability: str | None = None) -> object:
         try:

@@ -1,3 +1,5 @@
+"""Adapter protocol and collect/probe errors."""
+
 from __future__ import annotations
 
 from typing import Literal, Protocol

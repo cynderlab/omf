@@ -1,3 +1,5 @@
+"""Skeleton report body and local destokenized header (URL from RAM)."""
+
 from __future__ import annotations
 
 from collections import Counter

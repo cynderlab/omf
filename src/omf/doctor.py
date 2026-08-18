@@ -1,7 +1,7 @@
-# src/omf/doctor.py
+"""Read-only environment checks. Never connects to a firewall."""
+
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 from collections.abc import Callable, Mapping
@@ -53,9 +53,12 @@ def run_doctor_checks(
 def run() -> int:
     from pathlib import Path
 
+    from omf.config import load_llm_settings
+
     cwd = Path.cwd()
-    home = Path.home() / ".config" / "omf"
-    env_file_exists = (cwd / ".env").is_file() or (home / ".env").is_file()
+    config_dir = Path.home() / ".config" / "omf"
+    settings = load_llm_settings(cwd, config_dir)
+    env_file_exists = (cwd / ".env").is_file() or (config_dir / ".env").is_file()
     try:
         import omf  # noqa: F401
 
@@ -63,7 +66,12 @@ def run() -> int:
     except ImportError:
         imported = False
     code, lines = run_doctor_checks(
-        env=os.environ,
+        env={
+            "OMF_LLM_BASE_URL": settings.base_url or "",
+            "OMF_LLM_API_KEY": settings.api_key or "",
+            "OMF_LLM_MODEL": settings.model or "",
+            "OMF_LLM_API_STYLE": settings.api_style,
+        },
         which_uv=lambda: shutil.which("uv"),
         python_version=sys.version_info[:2],
         try_import=lambda: imported,

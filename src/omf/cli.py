@@ -1,17 +1,35 @@
-# src/omf/cli.py
+"""CLI dispatch: default TUI, install, doctor, help. Flags: -v/--debug."""
+
 from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
+
+from omf.log import configure
 
 HELP = """OH MY FIREWALL
 
 Usage:
   omf              Start the audit TUI
-  omf install      Sync all project dependencies with uv
+  omf install      Sync dependencies and create .env from .env.example if missing
   omf doctor       Check what is missing (no firewall connection)
   omf help         Show this help
+
+Flags:
+  -v, --debug      DEBUG logs on stderr (HTTP URLs, phases; no secrets)
 """
+
+
+def ensure_dotenv(root: Path) -> str:
+    dest = root / ".env"
+    example = root / ".env.example"
+    if dest.exists():
+        return "kept existing .env"
+    if not example.is_file():
+        return "no .env.example found"
+    dest.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+    return "created .env from .env.example"
 
 
 def run_tui() -> int:
@@ -24,21 +42,39 @@ def run_doctor() -> int:
     return run()
 
 
+def _parse(argv: list[str]) -> tuple[str | None, bool]:
+    debug = False
+    command: str | None = None
+    for arg in argv:
+        if arg in {"-v", "--verbose", "--debug"}:
+            debug = True
+            continue
+        if arg in {"help", "-h", "--help"}:
+            return "help", debug
+        if command is None:
+            command = arg
+            continue
+        return "help", debug
+    return command, debug
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if not args:
+    command, debug = _parse(args)
+    configure(debug=debug)
+    if command is None:
         return run_tui()
-    cmd = args[0]
-    if cmd in {"help", "-h", "--help"}:
+    if command == "help":
         print(HELP, end="")
         return 0
-    if cmd == "install":
+    if command == "install":
         completed = subprocess.run(
             ["uv", "sync", "--all-extras", "--all-groups"],
             check=False,
         )
+        print(ensure_dotenv(Path.cwd()))
         return int(completed.returncode)
-    if cmd == "doctor":
+    if command == "doctor":
         return run_doctor()
     print(HELP, end="")
     return 1

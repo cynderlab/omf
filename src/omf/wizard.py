@@ -1,3 +1,5 @@
+"""Pure validators for vendor, URL, language, and yes/no answers."""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -20,16 +22,38 @@ def parse_vendor(raw: str) -> Literal["mikrotik", "fortinet"]:
     return value  # type: ignore[return-value]
 
 
+def _clean_pasted_url(raw: str) -> str:
+    text = (
+        raw.replace("\u00a0", " ")
+        .replace("\r", "")
+        .replace("\n", "")
+        .replace("\t", "")
+    )
+    text = "".join(ch for ch in text if ch.isprintable())
+    return text.strip().strip("\"'“”‘’«»<>")
+
+
 def parse_url(raw: str) -> str:
-    parsed = urlparse(raw.strip())
+    text = _clean_pasted_url(raw)
+    if not text:
+        raise ValidationError("URL host is required")
+    if "://" not in text:
+        text = f"https://{text}"
+    parsed = urlparse(text)
     if parsed.scheme not in {"http", "https"}:
         raise ValidationError(f"URL scheme must be http or https: {raw!r}")
     if not parsed.netloc:
         raise ValidationError(f"URL host is required: {raw!r}")
     if parsed.username is not None or parsed.password is not None:
         raise ValidationError("credentials must not be embedded in the URL")
-    # Rebuild without trailing slash on path; keep path/query/fragment if present
     path = parsed.path.rstrip("/")
+    lowered = path.lower()
+    if (
+        lowered in {"/rest", "/webfig", "/login", "/index.html"}
+        or lowered.startswith("/rest/")
+        or lowered.startswith("/webfig")
+    ):
+        path = ""
     result = f"{parsed.scheme}://{parsed.netloc}{path}"
     if parsed.query:
         result += f"?{parsed.query}"

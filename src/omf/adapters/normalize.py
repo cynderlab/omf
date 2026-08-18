@@ -1,3 +1,5 @@
+"""Normalize vendor 'all' / empty / 0.0.0.0/0 / ::/0 to the token `any`."""
+
 from __future__ import annotations
 
 _ANY_LITERALS = frozenset({"", "*", "all", "any"})

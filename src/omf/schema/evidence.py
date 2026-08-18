@@ -1,3 +1,5 @@
+"""Evidence envelope and CheckResult. Frozen, extra fields forbidden."""
+
 from __future__ import annotations
 
 from datetime import datetime

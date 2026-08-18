@@ -1,5 +1,8 @@
+"""Redacted-only tools the analysis agent may call."""
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from pydantic_ai import Tool
@@ -59,25 +62,48 @@ def submit_report(ctx: AnalysisContext, markdown: str) -> str:
     return "ok"
 
 
-def make_tools(ctx: AnalysisContext) -> list:
+def _notify_tool(
+    on_tool: Callable[[dict], None] | None,
+    name: str,
+    **fields: object,
+) -> None:
+    if on_tool is None:
+        return
+    event: dict = {"tool": name}
+    for key in ("check_id", "capability"):
+        value = fields.get(key)
+        if isinstance(value, str) and value:
+            event[key] = value
+    on_tool(event)
+
+
+def make_tools(
+    ctx: AnalysisContext,
+    on_tool: Callable[[dict], None] | None = None,
+) -> list:
     def list_findings_bound() -> list[dict]:
         """Return check_id, status, severity, and title for every finding."""
+        _notify_tool(on_tool, "list_findings")
         return list_findings(ctx)
 
     def get_finding_bound(check_id: str) -> dict:
         """Return one redacted finding including diagnostic and observed."""
+        _notify_tool(on_tool, "get_finding", check_id=check_id)
         return get_finding(ctx, check_id)
 
     def get_redacted_evidence_bound(capability: str) -> dict:
         """Return one redacted capability payload."""
+        _notify_tool(on_tool, "get_redacted_evidence", capability=capability)
         return get_redacted_evidence(ctx, capability)
 
     def get_mitigation_bound(check_id: str) -> str:
         """Return catalog mitigation text for the check and this vendor."""
+        _notify_tool(on_tool, "get_mitigation", check_id=check_id)
         return get_mitigation(ctx, check_id)
 
     def submit_report_bound(markdown: str) -> str:
         """Submit the full markdown report body with no title header."""
+        _notify_tool(on_tool, "submit_report")
         return submit_report(ctx, markdown)
 
     return [

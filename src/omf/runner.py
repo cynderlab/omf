@@ -1,3 +1,5 @@
+"""Collect each needed capability once, then evaluate the catalog. No LLM."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -7,7 +9,10 @@ from omf.adapters.base import CollectError, VendorAdapter
 from omf.baseline.evaluators import evaluate
 from omf.baseline.loader import CheckDef
 from omf.schema.evidence import CheckResult, Evidence
+from omf.log import get_logger
 from omf.store import AuditStore
+
+_log = get_logger("omf.runner")
 
 _EVENT_FORBIDDEN = frozenset({
     "host",
@@ -48,10 +53,12 @@ class Runner:
         for capability in needed:
             if capability not in implemented:
                 continue
+            _log.info("collect %s", capability)
             try:
                 evidence, raw = self.adapter.collect(capability)
             except CollectError as exc:
                 failed[capability] = exc
+                _log.warning("collect %s failed: %s", capability, exc.message)
                 self._emit({
                     "phase": "collect",
                     "capability": capability,
@@ -94,10 +101,13 @@ class Runner:
             else:
                 result = evaluate(check, collected, self.adapter.vendor)
             findings.append(result)
+            _log.info("eval %s -> %s", check.id, result.status)
             self._emit({
                 "phase": "eval",
                 "check_id": check.id,
                 "status": result.status,
+                "severity": result.severity,
+                "diagnostic": result.diagnostic,
             })
 
         self.store.write_findings(findings)

@@ -1,3 +1,5 @@
+"""Deterministic identifier tokenization. The model only ever sees tokens."""
+
 from __future__ import annotations
 
 import re

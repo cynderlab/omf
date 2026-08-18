@@ -1,3 +1,5 @@
+"""Canonical frozen payloads for the nine MVP capabilities."""
+
 from __future__ import annotations
 
 from typing import Literal

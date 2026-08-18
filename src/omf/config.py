@@ -1,3 +1,5 @@
+"""LLM settings from `.env` and operator prefs from `~/.config/omf/config.yaml`."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,6 +33,8 @@ class UserPrefs:
     disclaimer_version: int
     default_report_language: Literal["ca", "es", "en"]
     last_vendor: Literal["mikrotik", "fortinet"] | None
+    last_url: str | None = None
+    last_username: str | None = None
 
 
 def _empty_to_none(value: str | None) -> str | None:
@@ -46,6 +50,8 @@ def _default_prefs() -> UserPrefs:
         disclaimer_version=0,
         default_report_language="ca",
         last_vendor=None,
+        last_url=None,
+        last_username=None,
     )
 
 
@@ -87,11 +93,20 @@ def _parse_prefs(data: object) -> UserPrefs:
     except (TypeError, ValueError):
         version_int = 0
 
+    last_url = _empty_to_none(str(data["last_url"]) if data.get("last_url") is not None else None)
+    if last_url and not last_url.startswith(("http://", "https://")):
+        last_url = None
+    last_username = _empty_to_none(
+        str(data["last_username"]) if data.get("last_username") is not None else None
+    )
+
     return UserPrefs(
         disclaimer_accepted=bool(data.get("disclaimer_accepted", False)),
         disclaimer_version=version_int,
         default_report_language=lang,  # type: ignore[arg-type]
         last_vendor=vendor,  # type: ignore[arg-type]
+        last_url=last_url,
+        last_username=last_username,
     )
 
 
@@ -121,6 +136,8 @@ def save_user_prefs(config_dir: Path, prefs: UserPrefs) -> None:
         "disclaimer_version": prefs.disclaimer_version,
         "default_report_language": prefs.default_report_language,
         "last_vendor": prefs.last_vendor,
+        "last_url": prefs.last_url,
+        "last_username": prefs.last_username,
     }
     path.write_text(
         yaml.safe_dump(payload, default_flow_style=False, sort_keys=False),

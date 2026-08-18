@@ -1,3 +1,5 @@
+"""OH MY FIREWALL — read-only multi-vendor firewall audit agent."""
+
 __version__ = "0.1.0"
 DISCLAIMER_VERSION = 1
 DISCLAIMER_TEXT = (

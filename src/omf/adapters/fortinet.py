@@ -1,3 +1,5 @@
+"""Fortinet FortiOS REST adapter (`/api/v2/...`, Bearer token or session login)."""
+
 from __future__ import annotations
 
 import json
@@ -9,6 +11,7 @@ import httpx
 
 from omf.adapters.base import CollectError, ProbeError
 from omf.adapters.normalize import as_any_token
+from omf.log import get_logger, http_target
 from omf.schema.capabilities import (
     ALL_CAPABILITIES,
     AdminSettings,
@@ -346,6 +349,9 @@ def forti_system(raw: object) -> SystemInfo:
     return SystemInfo(firmware=firmware, model=model)
 
 
+_log = get_logger("omf.http")
+
+
 class FortinetAdapter:
     vendor: Literal["fortinet"] = "fortinet"
 
@@ -483,12 +489,20 @@ class FortinetAdapter:
             status = response.status_code
             return response
         finally:
+            elapsed = int((time.perf_counter() - started) * 1000)
             self.last_call = {
                 "method": method,
                 "path": path,
                 "status": status,
-                "ms": int((time.perf_counter() - started) * 1000),
+                "ms": elapsed,
             }
+            _log.debug(
+                "%s %s -> %s (%sms)",
+                method,
+                http_target(self._client.base_url, path),
+                status,
+                elapsed,
+            )
 
     def _get(
         self,

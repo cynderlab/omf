@@ -1,3 +1,5 @@
+"""Frozen capability payloads and finding models."""
+
 from omf.schema.capabilities import (
     ALL_CAPABILITIES,
     AdminSettings,

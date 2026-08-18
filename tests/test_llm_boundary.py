@@ -1,5 +1,13 @@
 import json
-from omf.agent.tools import AnalysisContext, list_findings, get_finding, get_redacted_evidence, get_mitigation, submit_report
+from omf.agent.tools import (
+    AnalysisContext,
+    get_finding,
+    get_mitigation,
+    get_redacted_evidence,
+    list_findings,
+    make_tools,
+    submit_report,
+)
 from omf.baseline.loader import load_catalog
 from omf.redactor import Redactor
 
@@ -38,6 +46,30 @@ def test_submit_appends():
     assert ctx.submitted == ["# body"]
 
 
+def test_make_tools_emits_safe_tool_events():
+    ctx, _ = _ctx()
+    seen: list[dict] = []
+    tools = {tool.name: tool for tool in make_tools(ctx, on_tool=seen.append)}
+    tools["list_findings"].function()
+    tools["get_finding"].function(check_id="FW-ADM-001")
+    tools["get_redacted_evidence"].function(capability="users")
+    tools["get_mitigation"].function(check_id="FW-ADM-001")
+    tools["submit_report"].function(markdown="# secret-body-must-not-leak")
+    names = [event["tool"] for event in seen]
+    assert names == [
+        "list_findings",
+        "get_finding",
+        "get_redacted_evidence",
+        "get_mitigation",
+        "submit_report",
+    ]
+    assert seen[1]["check_id"] == "FW-ADM-001"
+    assert seen[2]["capability"] == "users"
+    blob = json.dumps(seen)
+    assert "secret-body-must-not-leak" not in blob
+    assert "markdown" not in blob
+
+
 def test_build_agent_has_no_session_attr():
     from omf.agent.llm import build_agent
     from omf.config import LlmSettings
@@ -61,8 +93,8 @@ def test_run_analysis_retries_once(monkeypatch):
     calls = {"n": 0}
     real_build = build_agent
 
-    def wrapped(ctx, settings):
-        agent = real_build(ctx, settings)
+    def wrapped(ctx, settings, on_tool=None):
+        agent = real_build(ctx, settings, on_tool=on_tool)
 
         async def fake_run(*args, **kwargs):
             calls["n"] += 1
@@ -131,9 +163,9 @@ def test_run_analysis_request_body_excludes_secrets(monkeypatch):
 
     real_build = build_agent
 
-    def wrapped(ctx_arg, settings):
+    def wrapped(ctx_arg, settings, on_tool=None):
         assert ctx_arg is ctx
-        agent = real_build(ctx_arg, settings)
+        agent = real_build(ctx_arg, settings, on_tool=on_tool)
         built["agent"] = agent
         return agent
 
@@ -154,3 +186,42 @@ def test_run_analysis_request_body_excludes_secrets(monkeypatch):
     assert "token_map" not in blob
     assert "raw/" not in blob
     assert json.dumps(token_map) not in blob
+
+
+def test_run_analysis_emits_tool_events_without_markdown(monkeypatch):
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from omf.agent.llm import build_agent, run_analysis
+    from omf.config import LlmSettings
+
+    ctx, _ = _ctx()
+    events: list[dict] = []
+
+    def capture_model(messages, info):
+        if not any(isinstance(message, ModelResponse) for message in messages):
+            return ModelResponse(parts=[
+                ToolCallPart("list_findings", {}),
+                ToolCallPart("get_finding", {"check_id": "FW-ADM-001"}),
+                ToolCallPart("submit_report", {"markdown": "# body"}),
+            ])
+        return ModelResponse(parts=[TextPart("ok")])
+
+    real_build = build_agent
+
+    def wrapped(ctx_arg, settings, on_tool=None):
+        agent = real_build(ctx_arg, settings, on_tool=on_tool)
+        return agent
+
+    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
+    monkeypatch.setattr("omf.agent.llm.build_agent", wrapped)
+    out = run_analysis(
+        ctx,
+        LlmSettings("http://llm.example", "sk-test", "model", "openai"),
+        on_event=events.append,
+    )
+    assert out == "# body"
+    tools = [event.get("tool") for event in events if event.get("status") == "tool"]
+    assert set(tools) == {"list_findings", "get_finding", "submit_report"}
+    assert all(event.get("phase") == "llm" for event in events)
+    assert "# body" not in json.dumps(events)

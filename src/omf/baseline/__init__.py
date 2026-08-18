@@ -1,3 +1,5 @@
+"""Baseline catalog, vendor profiles, and check resolution."""
+
 from omf.baseline.loader import (
     CheckDef,
     checks_for,

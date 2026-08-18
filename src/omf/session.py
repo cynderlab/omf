@@ -1,3 +1,5 @@
+"""In-memory audit session. Password and token never leave this object."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

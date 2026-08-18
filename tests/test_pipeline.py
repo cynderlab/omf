@@ -63,3 +63,13 @@ def test_pipeline_skeleton_report_and_no_secrets_on_disk(tmp_path: Path):
     assert '"fail"' in findings
     assert (store.path / "redacted" / "findings.json").is_file()
     assert (store.path / "token_map.json").is_file()
+
+
+def test_safe_exc_detail_strips_api_key():
+    from omf.pipeline import _safe_exc_detail
+
+    exc = RuntimeError("provider rejected key sk-secret-value")
+    detail = _safe_exc_detail(exc, "sk-secret-value")
+    assert "sk-secret-value" not in detail
+    assert "RuntimeError" in detail
+    assert "[STRIPPED]" in detail

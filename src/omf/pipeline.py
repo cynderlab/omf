@@ -1,3 +1,5 @@
+"""Probe → collect → evaluate → redact → analyze or skeleton → destokenized report."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -14,7 +16,10 @@ from omf.config import LlmSettings
 from omf.redactor import Redactor
 from omf.runner import Runner
 from omf.session import Session
+from omf.log import get_logger
 from omf.store import AuditStore
+
+_log = get_logger("omf.pipeline")
 
 _LAST_CALL_KEYS = ("method", "path", "status", "ms")
 
@@ -25,6 +30,8 @@ def run_audit(
     adapter: VendorAdapter,
     llm: LlmSettings,
     on_event: Callable[[dict], None],
+    *,
+    skip_probe: bool = False,
 ) -> Path:
     """probe, run, redact, write redacted/ + token_map, write report.md.
     Never writes session.url to meta.json.
@@ -41,9 +48,11 @@ def run_audit(
             "tool_version": __version__,
             "tls_verify": session.verify_tls,
         })
-        _emit(store, on_event, {"phase": "probe"})
-        adapter.probe()
-        _forward_last_call(adapter, store, on_event, {"phase": "probe"})
+        if not skip_probe:
+            _log.info("probe")
+            _emit(store, on_event, {"phase": "probe"})
+            adapter.probe()
+            _forward_last_call(adapter, store, on_event, {"phase": "probe"})
 
         checks = checks_for(session.vendor)
         result = Runner(
@@ -53,6 +62,7 @@ def run_audit(
             lambda event: on_event(_enrich_last_call(adapter, event)),
         ).run()
 
+        _log.info("redact findings=%s", len(result.findings))
         _emit(store, on_event, {"phase": "redact"})
         redactor = Redactor()
         redacted_findings = [redactor.redact_obj(finding) for finding in result.findings]
@@ -84,6 +94,7 @@ def run_audit(
             version=__version__,
         )
         store.write_report(report)
+        _log.info("report written")
         _emit(store, on_event, {"phase": "report"})
         return store.path / "report.md"
     finally:
@@ -102,7 +113,14 @@ def _analysis_body(
     redacted_findings,
     redacted_evidence: dict[str, dict],
 ) -> str:
+    model = llm.model or ""
+    style = llm.api_style
     if not llm.is_configured():
+        _emit(store, on_event, {
+            "phase": "llm",
+            "status": "skipped",
+            "detail": "LLM not configured",
+        })
         return skeleton_body(findings, checks, session.vendor)
     ctx = AnalysisContext(
         findings=[item for item in redacted_findings if isinstance(item, dict)],
@@ -113,12 +131,37 @@ def _analysis_body(
         submitted=[],
     )
     try:
-        _emit(store, on_event, {"phase": "llm"})
-        body = run_analysis(ctx, llm)
+        _log.info("llm start model=%s style=%s", model, style)
+        _emit(store, on_event, {
+            "phase": "llm",
+            "status": "start",
+            "model": model,
+            "style": style,
+        })
+        body = run_analysis(
+            ctx,
+            llm,
+            on_event=lambda event: _emit(store, on_event, event),
+        )
         store.write_report_redacted(body)
+        _emit(store, on_event, {"phase": "llm", "status": "done", "model": model})
         return body
-    except (LlmNotConfigured, Exception):
+    except (LlmNotConfigured, Exception) as exc:
+        _log.warning("llm fallback: %s", exc)
+        _emit(store, on_event, {
+            "phase": "llm",
+            "status": "fallback",
+            "model": model,
+            "detail": _safe_exc_detail(exc, llm.api_key),
+        })
         return skeleton_body(findings, checks, session.vendor)
+
+
+def _safe_exc_detail(exc: BaseException, secret: str | None) -> str:
+    text = f"{type(exc).__name__}: {exc}".strip()
+    if secret:
+        text = text.replace(secret, "[STRIPPED]")
+    return text.splitlines()[0][:240]
 
 
 def _started_at(store: AuditStore) -> datetime:

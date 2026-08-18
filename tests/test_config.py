@@ -58,11 +58,20 @@ def test_roundtrip_prefs(tmp_path: Path):
     cfg.mkdir()
     save_user_prefs(
         cfg,
-        UserPrefs(True, DISCLAIMER_VERSION, "en", "fortinet"),
+        UserPrefs(
+            True,
+            DISCLAIMER_VERSION,
+            "en",
+            "fortinet",
+            last_url="https://192.0.2.1",
+            last_username="reader",
+        ),
     )
     prefs, warning = load_user_prefs(cfg)
     assert warning is None
     assert prefs.last_vendor == "fortinet"
+    assert prefs.last_url == "https://192.0.2.1"
+    assert prefs.last_username == "reader"
     assert prefs.default_report_language == "en"
     assert needs_disclaimer(prefs) is False
 
@@ -72,10 +81,26 @@ def test_needs_disclaimer_when_version_stale():
     assert needs_disclaimer(prefs) is True
 
 
+def test_remember_does_not_blank_saved_username(tmp_path, monkeypatch):
+    from omf.session import Session
+    from omf.tui import _remember_target
+
+    monkeypatch.setattr("omf.tui._CONFIG_DIR", tmp_path)
+    prefs = UserPrefs(True, 1, "ca", "mikrotik", last_url="http://192.168.1.1", last_username="reader")
+    session = Session("mikrotik", "http://192.168.1.1", "", "", "", False, "ca")
+    _remember_target(prefs, session)
+    assert prefs.last_username == "reader"
+
+
 def test_prefs_never_write_secrets(tmp_path: Path):
     cfg = tmp_path / "c"
     cfg.mkdir()
-    save_user_prefs(cfg, UserPrefs(True, 1, "ca", "mikrotik"))
+    save_user_prefs(
+        cfg,
+        UserPrefs(True, 1, "ca", "mikrotik", last_url="https://192.0.2.1", last_username="reader"),
+    )
     text = (cfg / "config.yaml").read_text()
     assert "password" not in text
-    assert "http" not in text
+    assert "token" not in text
+    assert "reader" in text
+    assert "https://192.0.2.1" in text

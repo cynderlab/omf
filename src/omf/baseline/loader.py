@@ -1,3 +1,5 @@
+"""Load catalog.yaml / profiles and merge per-vendor check params."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

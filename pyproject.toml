@@ -2,6 +2,7 @@
 name = "omf"
 version = "0.1.0"
 description = "OH MY FIREWALL — read-only multi-vendor firewall audit agent"
+authors = [{ name = "Pere Casas", email = "pcasas@cynderlab.com" }]
 requires-python = ">=3.12"
 dependencies = [
   "pydantic>=2.10",
@@ -10,6 +11,7 @@ dependencies = [
   "rich>=13.9",
   "pyyaml>=6.0",
   "python-dotenv>=1.0",
+  "questionary>=2.1.1",
 ]
 
 [project.scripts]

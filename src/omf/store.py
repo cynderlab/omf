@@ -1,3 +1,5 @@
+"""Audit session directory layout under `./audits/`. Rejects secret keys in meta/events."""
+
 from __future__ import annotations
 
 import json

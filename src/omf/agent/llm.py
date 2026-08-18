@@ -1,7 +1,10 @@
+"""Pydantic AI analysis agent. No adapter, session, or token_map."""
+
 from __future__ import annotations
 
 import asyncio
 import inspect
+from collections.abc import Callable
 
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
@@ -11,6 +14,9 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from omf.agent.tools import AnalysisContext, make_tools
 from omf.config import LlmSettings
+from omf.log import get_logger
+
+_log = get_logger("omf.agent.llm")
 
 _SYSTEM_PROMPT = """You write a firewall audit report in language code: {language}.
 Use only tool data. Adapt catalog mitigations to the redacted evidence.
@@ -39,11 +45,15 @@ def _model_for(settings: LlmSettings):
     )
 
 
-def build_agent(ctx: AnalysisContext, settings: LlmSettings) -> Agent:
+def build_agent(
+    ctx: AnalysisContext,
+    settings: LlmSettings,
+    on_tool: Callable[[dict], None] | None = None,
+) -> Agent:
     return Agent(
         _model_for(settings),
         system_prompt=_SYSTEM_PROMPT.format(language=ctx.language),
-        tools=make_tools(ctx),
+        tools=make_tools(ctx, on_tool=on_tool),
         name="omf_analysis",
     )
 
@@ -54,11 +64,23 @@ def _invoke_run(agent: Agent) -> None:
         asyncio.run(result)
 
 
-def run_analysis(ctx: AnalysisContext, settings: LlmSettings) -> str:
+def run_analysis(
+    ctx: AnalysisContext,
+    settings: LlmSettings,
+    on_event: Callable[[dict], None] | None = None,
+) -> str:
     if not settings.is_configured():
         raise LlmNotConfigured("LLM base_url, api_key, and model are required")
 
-    agent = build_agent(ctx, settings)
+    def on_tool(event: dict) -> None:
+        if on_event is None:
+            return
+        _log.info("[llm] %s", event.get("tool"))
+        payload = {"phase": "llm", "status": "tool"}
+        payload.update(event)
+        on_event(payload)
+
+    agent = build_agent(ctx, settings, on_tool=on_tool)
     last_exc: BaseException | None = None
     for _ in range(2):
         try:

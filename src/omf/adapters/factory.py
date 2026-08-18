@@ -1,3 +1,5 @@
+"""Build a vendor adapter. The HTTP client is created here from the session."""
+
 from __future__ import annotations
 
 import httpx
@@ -20,6 +22,7 @@ def build_adapter(session: Session, client: httpx.Client | None = None) -> Vendo
             base_url=session.url,
             timeout=httpx.Timeout(30.0, connect=15.0),
             verify=session.verify_tls,
+            trust_env=False,
         )
     return adapter_cls(session, client)
 
