@@ -1,0 +1,152 @@
+checks:
+  - id: FW-ADM-001
+    title: No generic default admin username
+    severity: high
+    applies_to: [mikrotik, fortinet]
+    needs: [users]
+    evaluator: no_generic_accounts
+    params:
+      default:
+        names: [admin, administrator, root]
+      mikrotik:
+        names: [admin]
+        mode: must_not_exist
+      fortinet:
+        names: [admin]
+        mode: must_be_renamed
+    mitigation:
+      generic: "Replace factory-default admin identities with unique named accounts."
+      mikrotik: "Rename the default admin user under /user so the name is no longer admin."
+      fortinet: "Rename the default admin administrator. FortiOS does not allow deleting it."
+  - id: FW-ADM-002
+    title: Admin idle timeout is set
+    severity: medium
+    applies_to: [mikrotik, fortinet]
+    needs: [admin_settings]
+    evaluator: idle_timeout_set
+    params:
+      default: {}
+    mitigation:
+      generic: "Configure a non-zero administrative idle timeout."
+  - id: FW-ADM-003
+    title: Device identity is not the factory default
+    severity: low
+    applies_to: [mikrotik, fortinet]
+    needs: [admin_settings]
+    evaluator: hostname_not_default
+    params:
+      default: {}
+    mitigation:
+      generic: "Set a unique hostname that identifies the device and site."
+  - id: FW-SVC-001
+    title: Insecure management services are disabled
+    severity: high
+    applies_to: [mikrotik, fortinet]
+    needs: [services]
+    evaluator: insecure_services_disabled
+    params:
+      default: {}
+    mitigation:
+      generic: "Disable telnet, ftp, and cleartext HTTP management services."
+  - id: FW-SVC-002
+    title: Management services are not open to all
+    severity: high
+    applies_to: [mikrotik, fortinet]
+    needs: [services]
+    evaluator: services_not_unrestricted
+    params:
+      default: {}
+    mitigation:
+      generic: "Restrict management services to trusted addresses or interfaces."
+  - id: FW-NTP-001
+    title: NTP is enabled with at least one server
+    severity: medium
+    applies_to: [mikrotik, fortinet]
+    needs: [ntp]
+    evaluator: ntp_configured
+    params:
+      default: {}
+    mitigation:
+      generic: "Enable NTP and point it at trusted time servers."
+  - id: FW-DNS-001
+    title: DNS servers are configured
+    severity: low
+    applies_to: [mikrotik, fortinet]
+    needs: [dns]
+    evaluator: dns_configured
+    params:
+      default: {}
+    mitigation:
+      generic: "Configure explicit DNS servers, preferably internal."
+  - id: FW-LOG-001
+    title: Local logging is enabled
+    severity: medium
+    applies_to: [mikrotik, fortinet]
+    needs: [logging]
+    evaluator: local_logging_enabled
+    params:
+      default: {}
+    mitigation:
+      generic: "Enable local logging so administrative actions are recorded on-box."
+  - id: FW-LOG-002
+    title: Remote syslog is configured
+    severity: medium
+    applies_to: [mikrotik, fortinet]
+    needs: [logging]
+    evaluator: remote_syslog_configured
+    params:
+      default: {}
+    mitigation:
+      generic: "Send logs to a remote syslog collector that you control."
+  - id: FW-SNMP-001
+    title: No default SNMP community
+    severity: high
+    applies_to: [mikrotik, fortinet]
+    needs: [snmp]
+    evaluator: no_default_snmp_community
+    params:
+      default:
+        forbidden: [public, private]
+    mitigation:
+      generic: "Remove public/private communities. Prefer SNMPv3 or disable SNMP."
+  - id: FW-SNMP-002
+    title: SNMP is disabled or uses v3-only communities
+    severity: medium
+    applies_to: [mikrotik, fortinet]
+    needs: [snmp]
+    evaluator: snmp_not_legacy
+    params:
+      default: {}
+    mitigation:
+      generic: "Disable SNMP if unused, or configure SNMPv3 only."
+  - id: FW-POL-001
+    title: No unrestricted accept policy
+    severity: high
+    applies_to: [mikrotik, fortinet]
+    needs: [firewall_filter]
+    evaluator: no_any_any_accept
+    params:
+      default: {}
+    mitigation:
+      generic: "Remove or tighten any accept rule that allows any source, destination, and service."
+  - id: FW-POL-002
+    title: Explicit deny is present
+    severity: medium
+    applies_to: [mikrotik]
+    needs: [firewall_filter]
+    evaluator: explicit_deny_present
+    params:
+      default: {}
+    mitigation:
+      generic: "Add a final drop/deny rule so unmatched traffic is explicitly denied."
+      mikrotik: "Add a last /ip/firewall/filter rule with action=drop."
+  - id: FW-SYS-001
+    title: Firmware version is recorded
+    severity: info
+    applies_to: [mikrotik, fortinet]
+    needs: [system_info]
+    evaluator: firmware_present
+    params:
+      default: {}
+    mitigation:
+      generic: "Record the firmware version and compare it to the vendor advisory feed offline."

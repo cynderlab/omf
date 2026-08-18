@@ -1,0 +1,3 @@
+forbidden_services: [telnet, ftp, www]
+mgmt_services: [www, www-ssl, api, api-ssl, ssh, winbox]
+default_hostnames: ["MikroTik", ""]

@@ -22,6 +22,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/omf"]
 
+[tool.hatch.build]
+include = ["src/omf/**/*.yaml"]
+
 [dependency-groups]
 dev = ["pytest>=8.3"]
 
