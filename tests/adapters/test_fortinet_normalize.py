@@ -38,7 +38,9 @@ def test_ntp_dns_log_snmp_system_admin():
     log = forti_logging(load("syslogd.json"), None)
     assert log.remote_targets
     assert forti_snmp(load("snmp_sysinfo.json"), load("snmp_community.json")).communities[0].name == "public"
-    assert forti_system(load("status.json")).firmware.startswith("v7.4")
+    sysinfo = forti_system(load("status.json"))
+    assert sysinfo.firmware.startswith("v7.4")
+    assert sysinfo.model == "FortiGate"
     admin = forti_admin_settings(load("global.json"), load("admin.json"))
     assert admin.hostname == "FortiGate"
     assert admin.idle_timeout_seconds == 300
@@ -86,3 +88,16 @@ def test_logging_local_syslogd2_and_snmp_ntp_dns_filter():
     policy = forti_filter(load("policy.json")).policies[0]
     assert policy.id == "1"
     assert policy.enabled is True
+
+
+def test_forti_system_envelope_version_wins():
+    info = forti_system({
+        "results": {"model_name": "FortiGate-60F", "version": "v6.0.0"},
+        "version": "v7.4.4",
+        "serial": "FG60FTK20000000",
+    })
+    assert info.firmware == "v7.4.4"
+    assert info.model == "FortiGate-60F"
+    from_results = forti_system({"results": {"version": "v7.4.1", "model": "FGT_VM64"}})
+    assert from_results.firmware == "v7.4.1"
+    assert from_results.model == "FGT_VM64"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Literal, NoReturn
@@ -321,13 +322,28 @@ def forti_filter(raw: object) -> PolicyList:
     return PolicyList(policies=tuple(policies))
 
 
+def _first_present(*values: object) -> str | None:
+    for value in values:
+        if value in (None, ""):
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
 def forti_system(raw: object) -> SystemInfo:
+    # FortiOS monitor envelopes keep version/serial next to results.
+    envelope = raw if isinstance(raw, dict) else {}
     item = _as_record(raw)
-    model = item.get("model")
-    return SystemInfo(
-        firmware=str(item.get("version") or ""),
-        model=None if model in (None, "") else str(model),
+    firmware = _first_present(envelope.get("version"), item.get("version")) or ""
+    model = _first_present(
+        envelope.get("model_name"),
+        envelope.get("model"),
+        item.get("model_name"),
+        item.get("model"),
     )
+    return SystemInfo(firmware=firmware, model=model)
 
 
 class FortinetAdapter:
@@ -344,65 +360,70 @@ class FortinetAdapter:
         self._get("/api/v2/monitor/system/status")
 
     def collect(self, capability: str) -> tuple[Evidence, object]:
-        self._ensure_session(capability=capability)
-        if capability == "users":
-            raw: object = self._get("/api/v2/cmdb/system/admin", capability=capability)
-            payload: object = forti_users(raw)
-        elif capability == "admin_settings":
-            global_raw = self._get("/api/v2/cmdb/system/global", capability=capability)
-            admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)
-            raw = {
-                "/api/v2/cmdb/system/global": global_raw,
-                "/api/v2/cmdb/system/admin": admin_raw,
-            }
-            payload = forti_admin_settings(global_raw, admin_raw)
-        elif capability == "services":
-            interface_raw = self._get("/api/v2/cmdb/system/interface", capability=capability)
-            admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)
-            raw = {
-                "/api/v2/cmdb/system/interface": interface_raw,
-                "/api/v2/cmdb/system/admin": admin_raw,
-            }
-            payload = forti_services(interface_raw, admin_raw)
-        elif capability == "ntp":
-            raw = self._get("/api/v2/cmdb/system/ntp", capability=capability)
-            payload = forti_ntp(raw)
-        elif capability == "dns":
-            raw = self._get("/api/v2/cmdb/system/dns", capability=capability)
-            payload = forti_dns(raw)
-        elif capability == "logging":
-            syslogd = self._get("/api/v2/cmdb/log.syslogd/setting", capability=capability)
-            syslogd2 = self._get(
-                "/api/v2/cmdb/log.syslogd2/setting",
-                capability=capability,
-                optional=True,
-            )
-            raw = {"/api/v2/cmdb/log.syslogd/setting": syslogd}
-            if syslogd2 is not None:
-                raw["/api/v2/cmdb/log.syslogd2/setting"] = syslogd2
-            payload = forti_logging(syslogd, syslogd2)
-        elif capability == "snmp":
-            community_raw = self._get(
-                "/api/v2/cmdb/system/snmp/community",
-                capability=capability,
-            )
-            sysinfo_raw = self._get(
-                "/api/v2/cmdb/system/snmp/sysinfo",
-                capability=capability,
-            )
-            raw = {
-                "/api/v2/cmdb/system/snmp/community": community_raw,
-                "/api/v2/cmdb/system/snmp/sysinfo": sysinfo_raw,
-            }
-            payload = forti_snmp(sysinfo_raw, community_raw)
-        elif capability == "firewall_filter":
-            raw = self._get("/api/v2/cmdb/firewall/policy", capability=capability)
-            payload = forti_filter(raw)
-        elif capability == "system_info":
-            raw = self._get("/api/v2/monitor/system/status", capability=capability)
-            payload = forti_system(raw)
-        else:
-            raise CollectError(capability, "", None, f"unknown capability: {capability}")
+        try:
+            self._ensure_session(capability=capability)
+            if capability == "users":
+                raw: object = self._get("/api/v2/cmdb/system/admin", capability=capability)
+                payload: object = forti_users(raw)
+            elif capability == "admin_settings":
+                global_raw = self._get("/api/v2/cmdb/system/global", capability=capability)
+                admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)
+                raw = {
+                    "/api/v2/cmdb/system/global": global_raw,
+                    "/api/v2/cmdb/system/admin": admin_raw,
+                }
+                payload = forti_admin_settings(global_raw, admin_raw)
+            elif capability == "services":
+                interface_raw = self._get("/api/v2/cmdb/system/interface", capability=capability)
+                admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)
+                raw = {
+                    "/api/v2/cmdb/system/interface": interface_raw,
+                    "/api/v2/cmdb/system/admin": admin_raw,
+                }
+                payload = forti_services(interface_raw, admin_raw)
+            elif capability == "ntp":
+                raw = self._get("/api/v2/cmdb/system/ntp", capability=capability)
+                payload = forti_ntp(raw)
+            elif capability == "dns":
+                raw = self._get("/api/v2/cmdb/system/dns", capability=capability)
+                payload = forti_dns(raw)
+            elif capability == "logging":
+                syslogd = self._get("/api/v2/cmdb/log.syslogd/setting", capability=capability)
+                syslogd2 = self._get(
+                    "/api/v2/cmdb/log.syslogd2/setting",
+                    capability=capability,
+                    optional=True,
+                )
+                raw = {"/api/v2/cmdb/log.syslogd/setting": syslogd}
+                if syslogd2 is not None:
+                    raw["/api/v2/cmdb/log.syslogd2/setting"] = syslogd2
+                payload = forti_logging(syslogd, syslogd2)
+            elif capability == "snmp":
+                community_raw = self._get(
+                    "/api/v2/cmdb/system/snmp/community",
+                    capability=capability,
+                )
+                sysinfo_raw = self._get(
+                    "/api/v2/cmdb/system/snmp/sysinfo",
+                    capability=capability,
+                )
+                raw = {
+                    "/api/v2/cmdb/system/snmp/community": community_raw,
+                    "/api/v2/cmdb/system/snmp/sysinfo": sysinfo_raw,
+                }
+                payload = forti_snmp(sysinfo_raw, community_raw)
+            elif capability == "firewall_filter":
+                raw = self._get("/api/v2/cmdb/firewall/policy", capability=capability)
+                payload = forti_filter(raw)
+            elif capability == "system_info":
+                raw = self._get("/api/v2/monitor/system/status", capability=capability)
+                payload = forti_system(raw)
+            else:
+                raise CollectError(capability, "", None, f"unknown capability: {capability}")
+        except CollectError:
+            raise
+        except Exception as exc:
+            raise _normalize_failed(capability, self.last_call, exc) from exc
         return (
             Evidence(
                 capability=capability,
@@ -489,7 +510,25 @@ class FortinetAdapter:
                 f"GET {path} returned {response.status_code}",
                 capability,
             )
+        return _decode_json(response, path, capability)
+
+
+def _decode_json(response: httpx.Response, path: str, capability: str | None) -> object:
+    try:
         return response.json()
+    except json.JSONDecodeError as exc:
+        _raise_http(path, response.status_code, f"GET {path} returned invalid JSON: {exc}", capability)
+
+
+def _normalize_failed(capability: str, last_call: object, exc: Exception) -> CollectError:
+    path = ""
+    status: int | None = None
+    if isinstance(last_call, dict):
+        path = str(last_call.get("path") or "")
+        raw_status = last_call.get("status")
+        if isinstance(raw_status, int):
+            status = raw_status
+    return CollectError(capability, path, status, f"normalize failed: {exc}")
 
 
 def _raise_http(

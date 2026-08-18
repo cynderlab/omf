@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import time
 from datetime import datetime, timezone
@@ -272,47 +273,52 @@ class MikrotikAdapter:
         self._get("/rest/system/identity")
 
     def collect(self, capability: str) -> tuple[Evidence, object]:
-        if capability == "users":
-            raw: object = self._get("/rest/user", capability=capability)
-            payload: object = mikrotik_users(raw)
-        elif capability == "admin_settings":
-            identity = self._get("/rest/system/identity", capability=capability)
-            settings = self._get("/rest/user/settings", capability=capability)
-            raw = {
-                "/rest/system/identity": identity,
-                "/rest/user/settings": settings,
-            }
-            payload = mikrotik_admin_settings(identity, settings)
-        elif capability == "services":
-            raw = self._get("/rest/ip/service", capability=capability)
-            payload = mikrotik_services(raw)
-        elif capability == "ntp":
-            raw = self._get("/rest/system/ntp/client", capability=capability)
-            payload = mikrotik_ntp(raw)
-        elif capability == "dns":
-            raw = self._get("/rest/ip/dns", capability=capability)
-            payload = mikrotik_dns(raw)
-        elif capability == "logging":
-            rules = self._get("/rest/system/logging", capability=capability)
-            actions = self._get("/rest/system/logging/action", capability=capability)
-            raw = {
-                "/rest/system/logging": rules,
-                "/rest/system/logging/action": actions,
-            }
-            payload = mikrotik_logging(rules, actions)
-        elif capability == "snmp":
-            snmp = self._get("/rest/snmp", capability=capability)
-            communities = self._get("/rest/snmp/community", capability=capability)
-            raw = {"/rest/snmp": snmp, "/rest/snmp/community": communities}
-            payload = mikrotik_snmp(snmp, communities)
-        elif capability == "firewall_filter":
-            raw = self._get("/rest/ip/firewall/filter", capability=capability)
-            payload = mikrotik_filter(raw)
-        elif capability == "system_info":
-            raw = self._get("/rest/system/resource", capability=capability)
-            payload = mikrotik_system(raw)
-        else:
-            raise CollectError(capability, "", None, f"unknown capability: {capability}")
+        try:
+            if capability == "users":
+                raw: object = self._get("/rest/user", capability=capability)
+                payload: object = mikrotik_users(raw)
+            elif capability == "admin_settings":
+                identity = self._get("/rest/system/identity", capability=capability)
+                settings = self._get("/rest/user/settings", capability=capability)
+                raw = {
+                    "/rest/system/identity": identity,
+                    "/rest/user/settings": settings,
+                }
+                payload = mikrotik_admin_settings(identity, settings)
+            elif capability == "services":
+                raw = self._get("/rest/ip/service", capability=capability)
+                payload = mikrotik_services(raw)
+            elif capability == "ntp":
+                raw = self._get("/rest/system/ntp/client", capability=capability)
+                payload = mikrotik_ntp(raw)
+            elif capability == "dns":
+                raw = self._get("/rest/ip/dns", capability=capability)
+                payload = mikrotik_dns(raw)
+            elif capability == "logging":
+                rules = self._get("/rest/system/logging", capability=capability)
+                actions = self._get("/rest/system/logging/action", capability=capability)
+                raw = {
+                    "/rest/system/logging": rules,
+                    "/rest/system/logging/action": actions,
+                }
+                payload = mikrotik_logging(rules, actions)
+            elif capability == "snmp":
+                snmp = self._get("/rest/snmp", capability=capability)
+                communities = self._get("/rest/snmp/community", capability=capability)
+                raw = {"/rest/snmp": snmp, "/rest/snmp/community": communities}
+                payload = mikrotik_snmp(snmp, communities)
+            elif capability == "firewall_filter":
+                raw = self._get("/rest/ip/firewall/filter", capability=capability)
+                payload = mikrotik_filter(raw)
+            elif capability == "system_info":
+                raw = self._get("/rest/system/resource", capability=capability)
+                payload = mikrotik_system(raw)
+            else:
+                raise CollectError(capability, "", None, f"unknown capability: {capability}")
+        except CollectError:
+            raise
+        except Exception as exc:
+            raise _normalize_failed(capability, self.last_call, exc) from exc
         return (
             Evidence(
                 capability=capability,
@@ -360,7 +366,25 @@ class MikrotikAdapter:
                 f"GET {path} returned {response.status_code}",
                 capability,
             )
+        return _decode_json(response, path, capability)
+
+
+def _decode_json(response: httpx.Response, path: str, capability: str | None) -> object:
+    try:
         return response.json()
+    except json.JSONDecodeError as exc:
+        _raise_http(path, response.status_code, f"GET {path} returned invalid JSON: {exc}", capability)
+
+
+def _normalize_failed(capability: str, last_call: object, exc: Exception) -> CollectError:
+    path = ""
+    status: int | None = None
+    if isinstance(last_call, dict):
+        path = str(last_call.get("path") or "")
+        raw_status = last_call.get("status")
+        if isinstance(raw_status, int):
+            status = raw_status
+    return CollectError(capability, path, status, f"normalize failed: {exc}")
 
 
 def _raise_http(

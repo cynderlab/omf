@@ -88,3 +88,69 @@ def test_run_analysis_raises_when_not_configured():
     ctx, _ = _ctx()
     with pytest.raises(LlmNotConfigured):
         run_analysis(ctx, LlmSettings(None, None, None, "openai"))
+
+
+def test_run_analysis_request_body_excludes_secrets(monkeypatch):
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from omf.agent.llm import build_agent, run_analysis
+    from omf.config import LlmSettings
+
+    firewall_url = "https://192.0.2.8"
+    password = "s3cret-password"
+    api_key = "sk-live-secret-key"
+    redactor = Redactor()
+    findings = [redactor.redact_obj({
+        "check_id": "FW-ADM-001",
+        "status": "fail",
+        "severity": "high",
+        "title": "No generic default admin username",
+        "diagnostic": f"enabled user matches vendor default name 'admin' at {firewall_url}",
+        "observed": {"names": ["admin"], "url": firewall_url, "password": password, "api_key": api_key},
+    })]
+    evidence = {"users": redactor.redact_obj({
+        "users": [{"name": "admin", "enabled": True, "password": password}],
+    })}
+    ctx = AnalysisContext(findings, evidence, load_catalog(), "mikrotik", "ca", [])
+    token_map = redactor.token_map()
+    captured: list[object] = []
+    built: dict = {}
+
+    def capture_model(messages, info):
+        captured.append({"messages": messages, "info": info})
+        if not any(isinstance(message, ModelResponse) for message in messages):
+            return ModelResponse(parts=[
+                ToolCallPart("list_findings", {}),
+                ToolCallPart("get_finding", {"check_id": "FW-ADM-001"}),
+                ToolCallPart("get_redacted_evidence", {"capability": "users"}),
+                ToolCallPart("get_mitigation", {"check_id": "FW-ADM-001"}),
+                ToolCallPart("submit_report", {"markdown": "# body"}),
+            ])
+        return ModelResponse(parts=[TextPart("ok")])
+
+    real_build = build_agent
+
+    def wrapped(ctx_arg, settings):
+        assert ctx_arg is ctx
+        agent = real_build(ctx_arg, settings)
+        built["agent"] = agent
+        return agent
+
+    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
+    monkeypatch.setattr("omf.agent.llm.build_agent", wrapped)
+    out = run_analysis(ctx, LlmSettings("http://llm.example", api_key, "model", "openai"))
+    assert out == "# body"
+    assert built["agent"] is not None
+    assert not hasattr(built["agent"], "session")
+    assert not hasattr(built["agent"], "token_map")
+    assert not hasattr(ctx, "session")
+    assert not hasattr(ctx, "token_map")
+    assert not hasattr(ctx, "url")
+    blob = json.dumps(captured, default=str)
+    assert firewall_url not in blob
+    assert password not in blob
+    assert api_key not in blob
+    assert "token_map" not in blob
+    assert "raw/" not in blob
+    assert json.dumps(token_map) not in blob

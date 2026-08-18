@@ -120,6 +120,29 @@ def test_mikrotik_ignores_token():
     client.close()
 
 
+def test_mikrotik_collect_users_html_is_collect_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text="<html><body>login</body></html>",
+            headers={"content-type": "text/html"},
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://192.0.2.1")
+    ad = MikrotikAdapter(mt_session(), client)
+    try:
+        ad.collect("users")
+        raise AssertionError("should have failed")
+    except CollectError as exc:
+        assert exc.capability == "users"
+        assert exc.path == "/rest/user"
+        assert exc.status == 200
+        assert "invalid JSON" in exc.message
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"raw JSONDecodeError leaked: {exc}") from exc
+    client.close()
+
+
 def test_mikrotik_collect_non_2xx():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": 500})
@@ -282,6 +305,7 @@ def test_fortinet_collect_capabilities():
     assert policies.payload.policies[0].src == ("any",)
     system, _ = ad.collect("system_info")
     assert system.payload.firmware.startswith("v7.4")
+    assert system.payload.model == "FortiGate"
     client.close()
 
 
