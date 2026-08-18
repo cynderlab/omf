@@ -1,7 +1,7 @@
 # OMF — Firewall audit agent (MVP)
 
 **Date:** 2026-08-18  
-**Status:** Draft, pending user review  
+**Status:** Approved pending CLI entry-point addendum  
 **Product:** OH MY FIREWALL (`omf`)  
 **Repo:** greenfield
 
@@ -23,6 +23,7 @@ Mitigations appear in the report as **examples**. The tool never changes the dev
 - Persist raw evidence, canonical evidence, findings, and a Markdown report under `./audits/`.
 - English TUI (Rich + prompts). Report language `ca` | `es` | `en`.
 - Cloud LLM via OpenAI-compatible **or** Anthropic-compatible endpoints (OpenRouter, Fireworks, etc.).
+- Single operator entry point (`./omf` / `omf`): default TUI, plus `install`, `doctor`, `help`. Tooling is **uv**.
 
 ### Non-goals (MVP)
 
@@ -273,9 +274,55 @@ Report body structure (LLM and skeleton share this outline):
 
 Local wrapper then adds the title header (tool name, vendor, target URL from RAM, timestamp).
 
-## 12. TUI (MVP)
+## 12. CLI and TUI
 
-English. **Rich + sequential prompts.** Not Textual.
+### 12.1 Single entry point
+
+The operator never learns a second command. From a clone:
+
+```
+./omf              # default: TUI
+./omf help
+./omf install      # install / sync all project deps
+./omf doctor       # what is missing
+```
+
+After `install`, the same surface is available as the console script `omf` (`uv run omf …`).
+
+**Tooling:** `uv` + `pyproject.toml`. No pip, poetry, or Makefile as the operator interface. Python **3.12+**.
+
+**Bootstrap:** a POSIX shell launcher at the repo root named `omf` (no extension). It exists so `install` / `help` / a useful `doctor` work **before** the venv exists.
+
+| Arg | Behaviour |
+|---|---|
+| *(none)* | If deps are not synced, print “run `./omf install`” and exit 1. Else `uv run python -m omf` → TUI. |
+| `help` or `-h` / `--help` | Print the four commands. Exit 0. Works without a venv. |
+| `install` | If `uv` is missing, print the official uv install one-liner and exit 1 (do not curl from the script). Else `uv sync --all-extras --all-groups` from the repo root. Exit with uv’s status. |
+| `doctor` | Run the checks in §12.2. Exit 0 only if every **required** check passes. |
+| anything else | Print help. Exit 1. |
+
+The Python package (`python -m omf`, console script `omf`) implements the same verbs (`help`, `doctor`, default TUI). `install` in the Python CLI execs `uv sync --all-extras --all-groups` (same as the launcher). No other subcommands in the MVP (no `omf audit`, no `omf report`).
+
+### 12.2 `doctor`
+
+Read-only. Never asks for firewall credentials. Never opens a firewall connection.
+
+| Check | Level | Pass if |
+|---|---|---|
+| `uv` on `PATH` | required | `uv --version` works |
+| Python 3.12+ | required | `uv python` / interpreter ≥ 3.12 |
+| Deps synced | required | `import omf` works inside the project environment |
+| LLM `.env` file | warn | `./.env` or `~/.config/omf/.env` exists |
+| `OMF_LLM_BASE_URL` | warn | set and non-empty |
+| `OMF_LLM_API_KEY` | warn | set and non-empty (print only “set” / “missing”, never the value) |
+| `OMF_LLM_MODEL` | warn | set and non-empty |
+| `OMF_LLM_API_STYLE` | warn | missing (defaults to `openai`) or `openai` / `anthropic` |
+
+Output: one line per check, `OK` / `MISSING` / `WARN`, English. Required failures → exit 1. Warnings only (typical: no LLM yet) → exit 0, because collect/evaluate still work.
+
+### 12.3 TUI (MVP)
+
+English. **Rich + sequential prompts.** Not Textual. This is what `omf` with no args starts.
 
 1. Disclaimer (if needed).
 2. Wizard prompts.
@@ -361,14 +408,17 @@ CI has **no** live firewall.
 | Runner | Fake adapter. Each capability collected once; missing capability → SKIPPED; collect fail → ERROR on dependents; store layout asserted. |
 | LLM boundary | Mock model. Assert request bodies contain no URL, password, key, `raw`, or `token_map`. |
 | Wizard validation | Pure functions (URL parse, vendor enum, language enum). |
+| CLI / doctor | `help` text; doctor required vs warn; API key never printed; unknown arg → exit 1. |
 | Live Rich UI | Not tested. |
 | Real adapters | `integration` mark, optional, not CI. |
 
 ## 16. Package layout
 
-Python 3.12+. `uv` + `pyproject.toml`. CLI: `omf`.
+Python 3.12+. `uv` + `pyproject.toml`. Console script: `omf = omf.cli:main`. Root launcher: `./omf`.
 
 ```
+omf                  # POSIX launcher (install/help/doctor/default)
+pyproject.toml
 src/omf/
   __init__.py
   __main__.py
@@ -400,7 +450,7 @@ audits/              # gitignored
 
 A developer (or the implementation plan) is done with the MVP when:
 
-1. An operator can run `omf`, accept the disclaimer once, enter MikroTik or Fortinet details, and get `./audits/.../report.md` without the model ever receiving URL/creds/raw/token_map (enforced by tests in §15).
+1. An operator can run `./omf install`, `./omf doctor`, and `./omf` (TUI), accept the disclaimer once, enter MikroTik or Fortinet details, and get `./audits/.../report.md` without the model ever receiving URL/creds/raw/token_map (enforced by tests in §15).
 2. All 14 checks run; SKIPPED/ERROR/FAIL/PASS are distinguishable in the TUI table and `findings.json`.
 3. Both adapters fill the nine frozen capability models from the endpoints in §13 (unit-tested via fixtures).
 4. With LLM env set, the report is in the chosen language and contains adapted catalog mitigations. Without it, the skeleton report still lists every finding and verbatim mitigations.
@@ -425,4 +475,6 @@ A developer (or the implementation plan) is done with the MVP when:
 | Mitigations | Catalog text; LLM adapts, does not invent |
 | Connection | Official REST only |
 | TUI | Rich + prompts, one live view |
+| Tooling | uv only |
+| Entry point | `./omf` / `omf`: default TUI; `install`; `doctor`; `help` |
 | Matching | Capability × vendor; shared frozen models; params in YAML |
