@@ -15,7 +15,8 @@ Usage:
 
 
 def run_tui() -> int:
-    raise SystemExit("TUI not implemented")
+    from omf.tui import run
+    return run()
 
 
 def run_doctor() -> int:
