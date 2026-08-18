@@ -6,7 +6,7 @@ from omf.adapters.mikrotik import MikrotikAdapter
 from omf.adapters.fortinet import FortinetAdapter
 from omf.adapters.base import ProbeError, CollectError
 from omf.adapters.factory import build_adapter
-from omf.schema.capabilities import ALL_CAPABILITIES
+from omf.schema.capabilities import ALL_CAPABILITIES, CORE_CAPABILITIES
 
 MT = Path(__file__).parent / "fixtures" / "mikrotik"
 FT = Path(__file__).parent / "fixtures" / "fortinet"
@@ -347,7 +347,7 @@ def test_build_adapter_dispatch_and_implemented():
     mt_client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://192.0.2.1")
     mt = build_adapter(mt_session(), mt_client)
     assert isinstance(mt, MikrotikAdapter)
-    assert mt.implemented() == frozenset(ALL_CAPABILITIES)
+    assert mt.implemented() == frozenset(CORE_CAPABILITIES)
     ft_client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://192.0.2.2")
     ft = build_adapter(ft_session("tok"), ft_client)
     assert isinstance(ft, FortinetAdapter)

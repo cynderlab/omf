@@ -11,7 +11,7 @@ import httpx
 from omf.adapters.base import CollectError, ProbeError
 from omf.adapters.normalize import as_any_token
 from omf.schema.capabilities import (
-    ALL_CAPABILITIES,
+    CORE_CAPABILITIES,
     AdminSettings,
     DnsConfig,
     LoggingConfig,
@@ -330,7 +330,7 @@ class MikrotikAdapter:
         )
 
     def implemented(self) -> frozenset[str]:
-        return frozenset(ALL_CAPABILITIES)
+        return frozenset(CORE_CAPABILITIES)
 
     def close(self) -> None:
         self._client.close()
