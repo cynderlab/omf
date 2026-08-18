@@ -1,7 +1,7 @@
 # OMF — Firewall audit agent (MVP)
 
 **Date:** 2026-08-18  
-**Status:** Approved pending CLI entry-point addendum  
+**Status:** Approved  
 **Product:** OH MY FIREWALL (`omf`)  
 **Repo:** greenfield
 
