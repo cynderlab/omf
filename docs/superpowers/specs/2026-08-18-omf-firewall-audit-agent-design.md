@@ -113,41 +113,73 @@ class Evidence(BaseModel, Generic[T]):
     payload: T
 ```
 
-MVP payloads (fields may be optional with defaults; names are stable):
+MVP payloads (fields may be optional with defaults; names are stable). `CORE_CAPABILITIES` is the original nine. `ALL_CAPABILITIES` is CORE plus four Fortinet-only extras (`zones`, `local_in`, `ha`, `utm`). MikroTik `implemented()` returns CORE; Fortinet returns ALL. Extra-capability checks are SKIPPED on MikroTik.
 
-| Capability | Payload | Required fields |
-|---|---|---|
-| `users` | `UserList` | `users: tuple[User, ...]`; `User.name`, `User.enabled`, `User.groups` |
-| `admin_settings` | `AdminSettings` | `hostname`, `idle_timeout_seconds` (optional int) |
-| `services` | `ServiceList` | `services: tuple[Service, ...]`; `Service.name`, `Service.enabled`, `Service.port`, `Service.listen` (`all` / `restricted` / `unknown`) |
-| `ntp` | `NtpConfig` | `enabled`, `servers: tuple[str, ...]` |
-| `dns` | `DnsConfig` | `servers: tuple[str, ...]` |
-| `logging` | `LoggingConfig` | `local_enabled`, `remote_targets: tuple[str, ...]` |
-| `snmp` | `SnmpConfig` | `enabled`, `communities: tuple[SnmpCommunity, ...]`; `SnmpCommunity.name`, `SnmpCommunity.version` |
-| `firewall_filter` | `PolicyList` | `policies: tuple[Policy, ...]`; `Policy.id`, `Policy.enabled`, `Policy.action` (`accept` / `deny` / `drop` / `other`), `Policy.src`, `Policy.dst`, `Policy.service` (each `tuple[str, ...]`). Adapters **must** normalize vendor “all”, empty, `*`, `0.0.0.0/0`, `::/0` to the single token `any`. |
-| `system_info` | `SystemInfo` | `firmware`, `model` (optional) |
+| Capability | Payload | Required fields | Optional fields |
+|---|---|---|---|
+| `users` | `UserList` | `users: tuple[User, ...]`; `User.name`, `User.enabled`, `User.groups` | |
+| `admin_settings` | `AdminSettings` | `hostname`, `idle_timeout_seconds` (optional int) | `pre_login_banner`, `post_login_banner`, `timezone`, `admin_https_ssl_versions`, `log_single_cpu_high`, `password_policy_enabled`, `password_min_length`, `password_apply_to`, `admin_lockout_threshold`, `admin_lockout_duration`, `admin_http_port`, `admin_https_port`, `admin_https_redirect` |
+| `services` | `ServiceList` | `services: tuple[Service, ...]`; `Service.name`, `Service.enabled`, `Service.port`, `Service.listen` (`all` / `restricted` / `unknown`) | `Service.on_wan` (default `False`) |
+| `ntp` | `NtpConfig` | `enabled`, `servers: tuple[str, ...]` | |
+| `dns` | `DnsConfig` | `servers: tuple[str, ...]` | |
+| `logging` | `LoggingConfig` | `local_enabled`, `remote_targets: tuple[str, ...]` | `syslog_reliable`, `syslog_enc_high`, `faz_enabled`, `faz_reliable`, `faz_enc_high`, `implicit_policy_logged` |
+| `snmp` | `SnmpConfig` | `enabled`, `communities: tuple[SnmpCommunity, ...]`; `SnmpCommunity.name`, `SnmpCommunity.version` | `users: tuple[SnmpUser, ...]`; `SnmpUser.name`, `SnmpUser.security_level`; `trap_free_memory_threshold`, `trap_freeable_memory_threshold` |
+| `firewall_filter` | `PolicyList` | `policies: tuple[Policy, ...]`; `Policy.id`, `Policy.enabled`, `Policy.action` (`accept` / `deny` / `drop` / `other`), `Policy.src`, `Policy.dst`, `Policy.service` (each `tuple[str, ...]`). Adapters **must** normalize vendor “all”, empty, `*`, `0.0.0.0/0`, `::/0` to the single token `any`. | `Policy.log`, `ips_sensor`, `dnsfilter_profile`, `webfilter_profile`, `application_list`, `internet_src`, `internet_dst` |
+| `system_info` | `SystemInfo` | `firmware`, `model` (optional) | |
+| `zones` | `ZoneList` | `zones: tuple[Zone, ...]`; `Zone.name`, `Zone.intrazone` (`allow` / `deny` / `unknown`) | Fortinet-only |
+| `local_in` | `LocalInPolicyList` | `policies: tuple[LocalInPolicy, ...]`; `LocalInPolicy.id`, `enabled`, `action`, `virtual_patch` | Fortinet-only |
+| `ha` | `HaConfig` | `mode` | `monitor_interfaces`, `ha_mgmt_status`, `ha_mgmt_interfaces`. HA password is stripped from raw and model. Fortinet-only |
+| `utm` | `UtmConfig` | `profiles: tuple[UtmProfile, ...]`; `stitches: tuple[AutomationStitch, ...]` | `UtmProfile.name`, `kind` (`dnsfilter` / `webfilter` / `appctrl`), `log_all`, `blocked_categories`, `allowed_categories`; `AutomationStitch.name`, `enabled`. Fortinet-only |
 
 `CheckResult`: `check_id`, `status` (`pass` / `fail` / `error` / `skipped`), `severity`, `diagnostic` (short English sentence for the store; report writer translates), `capability_refs`, `observed` (JSON-serializable scalars/lists only).
 
 ## 7. MVP catalog
 
-Fourteen checks. IDs are ours (not CIS). Inspired by common hardening guides. Growing to ~30 later is additive YAML + evaluators only. There is no firmware EOL database; a “minimum version” check is omitted on purpose (it would be SKIPPED unless we invented a floor).
+Forty-two checks (14 MikroTik, 41 Fortinet). IDs are ours, not CIS. Inspired by CIS FortiGate 7.4.x Benchmark v1.0.1 Level 1. Level 2 is out of scope. CIS 2.4.3 is omitted because “correct profile” is org policy. There is no firmware EOL database; a “minimum version” check is omitted on purpose (it would be SKIPPED unless we invented a floor). CIS 2.1.6 is Level 2 and therefore omitted. `FW-POL-002` stays MikroTik-only. 7.3.2 and 7.3.3 are de-duplicated as `FW-LOG-003`.
 
 | ID | Title | needs | evaluator | Notes |
 |---|---|---|---|---|
 | FW-ADM-001 | No generic default admin username | `users` | `no_generic_accounts` | `params.names` per vendor; default `admin`, `administrator`, `root`. Fortinet: `mode: must_be_renamed` (default name still present = fail). MikroTik: `mode: must_not_exist`. |
 | FW-ADM-002 | Admin idle timeout is set | `admin_settings` | `idle_timeout_set` | Fail if timeout missing or `0`. Optional `params.max_seconds`. |
 | FW-ADM-003 | Device identity is not the factory default | `admin_settings` | `hostname_not_default` | `params.default_hostnames` per vendor (`MikroTik`, `FortiGate`, empty). |
+| FW-ADM-004 | Pre-login banner is enabled | `admin_settings` | `banner_enabled` | Fortinet-only. `params.field: pre_login_banner`. |
+| FW-ADM-005 | Post-login banner is enabled | `admin_settings` | `banner_enabled` | Fortinet-only. `params.field: post_login_banner`. |
+| FW-ADM-006 | Timezone is configured | `admin_settings` | `timezone_set` | Fortinet-only. Non-empty timezone; do not fail the FortiOS default GMT-8. |
+| FW-ADM-007 | Management GUI uses TLS 1.3 only | `admin_settings` | `tls_versions_allowed` | Fortinet-only. Every token must be `tlsv1-3`. |
+| FW-ADM-008 | Single CPU core high usage is logged | `admin_settings` | `flag_enabled` | Fortinet-only. `params.field: log_single_cpu_high`. |
+| FW-ADM-009 | Administrator password policy meets length 14 | `admin_settings` | `password_policy_strong` | Fortinet-only. Policy on, min length 14, apply-to includes `admin-password`. |
+| FW-ADM-010 | Administrator lockout threshold and duration are bounded | `admin_settings` | `lockout_configured` | Fortinet-only. Threshold `1..3`, duration `1..900`. |
+| FW-ADM-011 | Default administrative HTTP and HTTPS ports are changed | `admin_settings` | `admin_ports_changed` | Fortinet-only. HTTP ≠ 80, HTTPS ≠ 443, HTTPS redirect off. |
 | FW-SVC-001 | Insecure management services are disabled | `services` | `insecure_services_disabled` | `params.forbidden` e.g. `telnet`, `ftp`, `www`, `http`. |
 | FW-SVC-002 | Management services are not open to all | `services` | `services_not_unrestricted` | Fail if an enabled mgmt service has `listen=all` or `listen=unknown`. `params.mgmt` list. |
+| FW-SVC-003 | WAN interfaces have no management services | `services` | `wan_mgmt_disabled` | Fortinet-only. Fail if a `params.wan_mgmt` service has `on_wan`. |
+| FW-NET-001 | Intra-zone traffic is denied | `zones` | `intrazone_denied` | Fortinet-only. Fail if any zone has `intrazone == "allow"`. Zero zones → pass. |
 | FW-NTP-001 | NTP is enabled with at least one server | `ntp` | `ntp_configured` | |
 | FW-DNS-001 | DNS servers are configured | `dns` | `dns_configured` | |
 | FW-LOG-001 | Local logging is enabled | `logging` | `local_logging_enabled` | |
 | FW-LOG-002 | Remote syslog is configured | `logging` | `remote_syslog_configured` | |
+| FW-LOG-003 | Remote syslog uses reliable high encryption | `logging` | `syslog_encrypted` | Fortinet-only. Pass if no remote syslog. Covers CIS 7.3.2 and 7.3.3. |
+| FW-LOG-004 | FortiAnalyzer logging uses reliable high encryption | `logging` | `faz_encrypted` | Fortinet-only. Pass if FAZ disabled. |
 | FW-SNMP-001 | No default SNMP community | `snmp` | `no_default_snmp_community` | Fail if enabled community name is `public` or `private` (case-insensitive). |
 | FW-SNMP-002 | SNMP is disabled or uses v3-only communities | `snmp` | `snmp_not_legacy` | Pass if SNMP disabled **or** all communities are v3. |
+| FW-SNMP-003 | SNMP memory trap thresholds are configured | `snmp` | `snmp_memory_traps` | Fortinet-only. Pass if SNMP disabled. |
 | FW-POL-001 | No unrestricted accept policy | `firewall_filter` | `no_any_any_accept` | Fail if enabled policy is accept + src/dst/service all `any`. |
 | FW-POL-002 | Explicit deny is present (MikroTik) | `firewall_filter` | `explicit_deny_present` | `applies_to: [mikrotik]`. Fortinet implicit deny → this check skipped. |
+| FW-POL-003 | Policies do not use ALL as service | `firewall_filter` | `no_unrestricted_service` | Fortinet-only. Fail if an enabled policy’s service tokens are all `any`. |
+| FW-POL-004 | ISDB deny policies cover Tor and malicious services | `firewall_filter` | `isdb_denies_present` | Fortinet-only. |
+| FW-POL-005 | Logging is enabled on policies and implicit deny | `firewall_filter`, `logging` | `policies_logged` | Fortinet-only. |
+| FW-LIP-001 | Local-in policies are present | `local_in` | `local_in_present` | Fortinet-only. At least one enabled local-in policy. |
+| FW-LIP-002 | Virtual patch is enabled on accept local-in policies | `local_in` | `virtual_patch_on_accept` | Fortinet-only. |
+| FW-HA-001 | HA monitor interfaces are set | `ha` | `ha_monitors_set` | Fortinet-only. Pass if HA disabled. |
+| FW-HA-002 | HA reserved management is configured | `ha` | `ha_reserved_mgmt` | Fortinet-only. Pass if HA disabled. |
+| FW-UTM-001 | IPS sensor is set on accept policies | `firewall_filter` | `utm_on_accept` | Fortinet-only. `params.field: ips_sensor`. |
+| FW-UTM-002 | DNS filter logs all queries | `utm` | `utm_profile_log_all` | Fortinet-only. |
+| FW-UTM-003 | DNS filter is set on accept policies | `firewall_filter` | `utm_on_accept` | Fortinet-only. `params.field: dnsfilter_profile`. |
+| FW-UTM-004 | Web filter blocks malicious, phishing, and spam | `utm` | `utm_profile_blocks` | Fortinet-only. |
+| FW-UTM-005 | Application control blocks P2P and proxy | `utm` | `utm_profile_blocks` | Fortinet-only. |
+| FW-UTM-006 | Application control has no allow categories | `utm` | `utm_profile_no_allow` | Fortinet-only. |
+| FW-UTM-007 | Application control is set on accept policies | `firewall_filter` | `utm_on_accept` | Fortinet-only. `params.field: application_list`. |
+| FW-FAB-001 | Compromised Host Quarantine stitch is enabled | `utm` | `stitch_enabled` | Fortinet-only. |
 | FW-SYS-001 | Firmware version is recorded | `system_info` | `firmware_present` | Pass if `firmware` non-empty. Informational; no EOL DB. |
 
 Each check has `mitigation.generic` plus optional `mitigation.mikrotik` / `mitigation.fortinet`. Text is curated in the catalog. The LLM may rephrase and bind it to redacted evidence. It must not invent CLI/API that is not implied by that text.

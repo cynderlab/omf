@@ -37,3 +37,15 @@ def test_new_admin_l1_checks_are_fortinet_only():
     assert "FW-ADM-004" in ids
     assert "FW-ADM-004" not in {c.id for c in checks_for("mikrotik")}
     assert "FW-ADM-004" in {c.id for c in checks_for("fortinet")}
+
+
+def test_catalog_final_counts():
+    assert len(load_catalog()) == 42
+    assert len(checks_for("mikrotik")) == 14
+    assert len(checks_for("fortinet")) == 41
+    assert {c.id for c in load_catalog() if "fortinet" in c.applies_to} >= {
+        "FW-ADM-004", "FW-SVC-003", "FW-NET-001", "FW-SNMP-003",
+        "FW-LOG-003", "FW-LOG-004", "FW-POL-003", "FW-POL-004", "FW-POL-005",
+        "FW-LIP-001", "FW-LIP-002", "FW-HA-001", "FW-HA-002",
+        "FW-UTM-001", "FW-UTM-007", "FW-FAB-001",
+    }
