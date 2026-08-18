@@ -221,6 +221,28 @@ checks:
       default: {}
     mitigation:
       generic: "Send logs to a remote syslog collector that you control."
+  - id: FW-LOG-003
+    title: Remote syslog uses reliable high encryption
+    severity: medium
+    applies_to: [fortinet]
+    needs: [logging]
+    evaluator: syslog_encrypted
+    params:
+      default: {}
+    mitigation:
+      generic: "Encrypt remote syslog with a reliable transport and high-strength algorithm, or disable remote syslog."
+      fortinet: "In config log syslogd setting, set status enable, set reliable enable, and set enc-algorithm high."
+  - id: FW-LOG-004
+    title: FortiAnalyzer logging uses reliable high encryption
+    severity: medium
+    applies_to: [fortinet]
+    needs: [logging]
+    evaluator: faz_encrypted
+    params:
+      default: {}
+    mitigation:
+      generic: "Encrypt FortiAnalyzer/FortiManager log shipping with a reliable transport and high-strength algorithm, or disable FAZ logging."
+      fortinet: "In config log fortianalyzer setting, set status enable, set reliable enable, and set enc-algorithm high."
   - id: FW-SNMP-001
     title: No default SNMP community
     severity: high
@@ -240,8 +262,22 @@ checks:
     evaluator: snmp_not_legacy
     params:
       default: {}
+      fortinet:
+        require_v3_user: true
     mitigation:
       generic: "Disable SNMP if unused, or configure SNMPv3 only."
+      fortinet: "Disable SNMP, or remove v1/v2c communities and configure at least one SNMPv3 user under config system snmp user."
+  - id: FW-SNMP-003
+    title: SNMP memory trap thresholds are configured
+    severity: medium
+    applies_to: [fortinet]
+    needs: [snmp]
+    evaluator: snmp_memory_traps
+    params:
+      default: {}
+    mitigation:
+      generic: "When SNMP is enabled, set free-memory and freeable-memory trap thresholds above zero."
+      fortinet: "In config system snmp sysinfo, set trap-free-memory-threshold and trap-freeable-memory-threshold to values greater than 0."
   - id: FW-POL-001
     title: No unrestricted accept policy
     severity: high

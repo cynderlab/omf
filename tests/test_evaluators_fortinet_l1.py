@@ -9,9 +9,20 @@ from omf.baseline.evaluators.admin import (
     timezone_set,
     tls_versions_allowed,
 )
+from omf.baseline.evaluators.logging import faz_encrypted, syslog_encrypted
 from omf.baseline.evaluators.network import intrazone_denied
 from omf.baseline.evaluators.services import wan_mgmt_disabled
-from omf.schema.capabilities import AdminSettings, Service, ServiceList, Zone, ZoneList
+from omf.baseline.evaluators.snmp import snmp_memory_traps, snmp_not_legacy
+from omf.schema.capabilities import (
+    AdminSettings,
+    LoggingConfig,
+    Service,
+    ServiceList,
+    SnmpConfig,
+    SnmpUser,
+    Zone,
+    ZoneList,
+)
 from omf.schema.evidence import Evidence
 
 
@@ -105,3 +116,73 @@ def test_intrazone_denied_fail_allow_pass_deny():
     deny = ev("zones", ZoneList(zones=(Zone(name="DMZ", intrazone="deny"),)))
     assert intrazone_denied({"zones": allow}, {}, "fortinet").status == "fail"
     assert intrazone_denied({"zones": deny}, {}, "fortinet").status == "pass"
+
+
+def test_snmp_require_v3_user():
+    no_users = ev("snmp", SnmpConfig(enabled=True, communities=()))
+    assert snmp_not_legacy({"snmp": no_users}, {"require_v3_user": True}, "fortinet").status == "fail"
+    with_user = ev(
+        "snmp",
+        SnmpConfig(
+            enabled=True,
+            communities=(),
+            users=(SnmpUser(name="monitor", security_level="auth-priv"),),
+        ),
+    )
+    assert snmp_not_legacy({"snmp": with_user}, {"require_v3_user": True}, "fortinet").status == "pass"
+    disabled = ev("snmp", SnmpConfig(enabled=False, communities=()))
+    assert snmp_not_legacy({"snmp": disabled}, {"require_v3_user": True}, "fortinet").status == "pass"
+
+
+def test_snmp_memory_traps():
+    disabled = ev("snmp", SnmpConfig(enabled=False, communities=()))
+    assert snmp_memory_traps({"snmp": disabled}, {}, "fortinet").status == "pass"
+    zero = ev(
+        "snmp",
+        SnmpConfig(
+            enabled=True,
+            communities=(),
+            trap_free_memory_threshold=0,
+            trap_freeable_memory_threshold=0,
+        ),
+    )
+    assert snmp_memory_traps({"snmp": zero}, {}, "fortinet").status == "fail"
+    ok = ev(
+        "snmp",
+        SnmpConfig(
+            enabled=True,
+            communities=(),
+            trap_free_memory_threshold=20,
+            trap_freeable_memory_threshold=50,
+        ),
+    )
+    assert snmp_memory_traps({"snmp": ok}, {}, "fortinet").status == "pass"
+
+
+def test_syslog_and_faz_encrypted():
+    no_remotes = ev("logging", LoggingConfig(local_enabled=True, remote_targets=()))
+    assert syslog_encrypted({"logging": no_remotes}, {}, "fortinet").status == "pass"
+    bad_syslog = ev(
+        "logging",
+        LoggingConfig(
+            local_enabled=True,
+            remote_targets=("10.0.0.9",),
+            syslog_reliable=False,
+            syslog_enc_high=False,
+        ),
+    )
+    assert syslog_encrypted({"logging": bad_syslog}, {}, "fortinet").status == "fail"
+    faz_off = ev("logging", LoggingConfig(local_enabled=True, remote_targets=(), faz_enabled=False))
+    assert faz_encrypted({"logging": faz_off}, {}, "fortinet").status == "pass"
+    faz_bad = ev(
+        "logging",
+        LoggingConfig(
+            local_enabled=True,
+            remote_targets=(),
+            faz_enabled=True,
+            faz_reliable=False,
+            faz_enc_high=False,
+        ),
+    )
+    assert faz_encrypted({"logging": faz_bad}, {}, "fortinet").status == "fail"
+

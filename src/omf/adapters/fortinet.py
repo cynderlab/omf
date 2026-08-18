@@ -24,6 +24,7 @@ from omf.schema.capabilities import (
     ServiceList,
     SnmpCommunity,
     SnmpConfig,
+    SnmpUser,
     SystemInfo,
     User,
     UserList,
@@ -360,19 +361,51 @@ def forti_dns(raw: object) -> DnsConfig:
     return DnsConfig(servers=_dns_servers(_as_record(raw)))
 
 
-def forti_logging(syslogd_raw: object, syslogd2_raw: object | None) -> LoggingConfig:
+def _enc_high(value: object) -> bool:
+    return str(value or "").strip().lower() in {"high", "highs", "high-ssl"}
+
+
+def forti_logging(
+    syslogd_raw: object,
+    syslogd2_raw: object | None,
+    faz_raw: object | None = None,
+    log_setting_raw: object | None = None,
+) -> LoggingConfig:
     remotes = [*_syslog_targets(syslogd_raw), *_syslog_targets(syslogd2_raw)]
-    return LoggingConfig(local_enabled=True, remote_targets=tuple(remotes))
+    syslog = _as_record(syslogd_raw)
+    faz = _as_record(faz_raw)
+    setting = _as_record(log_setting_raw)
+    return LoggingConfig(
+        local_enabled=True,
+        remote_targets=tuple(remotes),
+        syslog_reliable=_as_bool(syslog.get("reliable"), default=False) if remotes else None,
+        syslog_enc_high=_enc_high(syslog.get("enc-algorithm")) if remotes else None,
+        faz_enabled=_as_bool(faz.get("status"), default=False) if faz else None,
+        faz_reliable=_as_bool(faz.get("reliable"), default=False) if faz else None,
+        faz_enc_high=_enc_high(faz.get("enc-algorithm")) if faz else None,
+        implicit_policy_logged=_as_bool(setting.get("fwpolicy-implicit-log"), default=False) if setting else None,
+    )
 
 
-def forti_snmp(sysinfo_raw: object, community_raw: object) -> SnmpConfig:
+def forti_snmp(sysinfo_raw: object, community_raw: object, user_raw: object | None = None) -> SnmpConfig:
+    info = _as_record(sysinfo_raw)
     communities = [
         SnmpCommunity(name=str(item.get("name") or ""), version=_snmp_version(item))
         for item in _as_records(community_raw)
     ]
+    users = [
+        SnmpUser(
+            name=str(item.get("name") or ""),
+            security_level=str(item.get("security-level") or ""),
+        )
+        for item in _as_records(user_raw)
+    ]
     return SnmpConfig(
-        enabled=_as_bool(_as_record(sysinfo_raw).get("status"), default=False),
+        enabled=_as_bool(info.get("status"), default=False),
         communities=tuple(communities),
+        users=tuple(users),
+        trap_free_memory_threshold=_as_int(info.get("trap-free-memory-threshold")),
+        trap_freeable_memory_threshold=_as_int(info.get("trap-freeable-memory-threshold")),
     )
 
 
@@ -470,10 +503,24 @@ class FortinetAdapter:
                     capability=capability,
                     optional=True,
                 )
+                faz = self._get(
+                    "/api/v2/cmdb/log.fortianalyzer/setting",
+                    capability=capability,
+                    optional=True,
+                )
+                log_setting = self._get(
+                    "/api/v2/cmdb/log.setting",
+                    capability=capability,
+                    optional=True,
+                )
                 raw = {"/api/v2/cmdb/log.syslogd/setting": syslogd}
                 if syslogd2 is not None:
                     raw["/api/v2/cmdb/log.syslogd2/setting"] = syslogd2
-                payload = forti_logging(syslogd, syslogd2)
+                if faz is not None:
+                    raw["/api/v2/cmdb/log.fortianalyzer/setting"] = faz
+                if log_setting is not None:
+                    raw["/api/v2/cmdb/log.setting"] = log_setting
+                payload = forti_logging(syslogd, syslogd2, faz, log_setting)
             elif capability == "snmp":
                 community_raw = self._get(
                     "/api/v2/cmdb/system/snmp/community",
@@ -483,11 +530,16 @@ class FortinetAdapter:
                     "/api/v2/cmdb/system/snmp/sysinfo",
                     capability=capability,
                 )
+                user_raw = self._get(
+                    "/api/v2/cmdb/system/snmp/user",
+                    capability=capability,
+                )
                 raw = {
                     "/api/v2/cmdb/system/snmp/community": community_raw,
                     "/api/v2/cmdb/system/snmp/sysinfo": sysinfo_raw,
+                    "/api/v2/cmdb/system/snmp/user": user_raw,
                 }
-                payload = forti_snmp(sysinfo_raw, community_raw)
+                payload = forti_snmp(sysinfo_raw, community_raw, user_raw)
             elif capability == "firewall_filter":
                 raw = self._get("/api/v2/cmdb/firewall/policy", capability=capability)
                 payload = forti_filter(raw)

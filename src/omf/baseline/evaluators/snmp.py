@@ -43,13 +43,49 @@ def snmp_not_legacy(
         if payload.enabled
         else []
     )
+    missing_user = bool(params.get("require_v3_user")) and payload.enabled and not payload.users
+    failed = bool(hits) or missing_user
+    if hits:
+        diagnostic = f"legacy SNMP communities {hits!r}"
+    elif missing_user:
+        diagnostic = "SNMP enabled without an SNMPv3 user"
+    else:
+        diagnostic = "SNMP is disabled or v3-only"
     return CheckResult(
         check_id="",
-        status="fail" if hits else "pass",
+        status="fail" if failed else "pass",
+        severity="medium",
+        diagnostic=diagnostic,
+        capability_refs=("snmp",),
+        observed={"enabled": payload.enabled, "legacy": hits, "users": len(payload.users)},
+    )
+
+
+def snmp_memory_traps(
+    evidence: Mapping[str, Evidence],
+    params: dict,
+    vendor: str,
+) -> CheckResult:
+    payload: SnmpConfig = evidence["snmp"].payload
+    free_ok = isinstance(payload.trap_free_memory_threshold, int) and payload.trap_free_memory_threshold > 0
+    freeable_ok = (
+        isinstance(payload.trap_freeable_memory_threshold, int)
+        and payload.trap_freeable_memory_threshold > 0
+    )
+    failed = payload.enabled and not (free_ok and freeable_ok)
+    return CheckResult(
+        check_id="",
+        status="fail" if failed else "pass",
         severity="medium",
         diagnostic=(
-            f"legacy SNMP communities {hits!r}" if hits else "SNMP is disabled or v3-only"
+            "SNMP memory trap thresholds are missing or zero"
+            if failed
+            else "SNMP is disabled or memory traps are configured"
         ),
         capability_refs=("snmp",),
-        observed={"enabled": payload.enabled, "legacy": hits},
+        observed={
+            "enabled": payload.enabled,
+            "trap_free_memory_threshold": payload.trap_free_memory_threshold,
+            "trap_freeable_memory_threshold": payload.trap_freeable_memory_threshold,
+        },
     )

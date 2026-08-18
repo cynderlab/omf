@@ -129,3 +129,16 @@ def test_services_on_wan_and_zones():
     assert zones.zones[0].name == "DMZ"
     assert zones.zones[0].intrazone == "allow"
 
+
+def test_snmp_traps_and_logging_crypto():
+    snmp = forti_snmp(load("snmp_sysinfo.json"), load("snmp_community.json"), load("snmp_user.json"))
+    assert snmp.users == ()
+    assert snmp.trap_free_memory_threshold == 0
+    log = forti_logging(load("syslogd.json"), None, load("fortianalyzer.json"), load("log_setting.json"))
+    assert log.syslog_reliable is False
+    assert log.syslog_enc_high is False
+    assert log.faz_enabled is True
+    assert log.faz_enc_high is False
+    assert log.implicit_policy_logged is False
+
+

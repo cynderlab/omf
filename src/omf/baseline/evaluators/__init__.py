@@ -14,7 +14,12 @@ from omf.baseline.evaluators.admin import (
     timezone_set,
     tls_versions_allowed,
 )
-from omf.baseline.evaluators.logging import local_logging_enabled, remote_syslog_configured
+from omf.baseline.evaluators.logging import (
+    faz_encrypted,
+    local_logging_enabled,
+    remote_syslog_configured,
+    syslog_encrypted,
+)
 from omf.baseline.evaluators.network import intrazone_denied
 from omf.baseline.evaluators.ntp_dns import dns_configured, ntp_configured
 from omf.baseline.evaluators.policy import explicit_deny_present, no_any_any_accept
@@ -23,7 +28,7 @@ from omf.baseline.evaluators.services import (
     services_not_unrestricted,
     wan_mgmt_disabled,
 )
-from omf.baseline.evaluators.snmp import no_default_snmp_community, snmp_not_legacy
+from omf.baseline.evaluators.snmp import no_default_snmp_community, snmp_memory_traps, snmp_not_legacy
 from omf.baseline.evaluators.system import firmware_present
 from omf.baseline.loader import CheckDef, resolve_params
 from omf.schema.evidence import CheckResult, Evidence
@@ -48,8 +53,11 @@ REGISTRY: dict[str, Evaluator] = {
     "dns_configured": dns_configured,
     "local_logging_enabled": local_logging_enabled,
     "remote_syslog_configured": remote_syslog_configured,
+    "syslog_encrypted": syslog_encrypted,
+    "faz_encrypted": faz_encrypted,
     "no_default_snmp_community": no_default_snmp_community,
     "snmp_not_legacy": snmp_not_legacy,
+    "snmp_memory_traps": snmp_memory_traps,
     "no_any_any_accept": no_any_any_accept,
     "explicit_deny_present": explicit_deny_present,
     "firmware_present": firmware_present,
