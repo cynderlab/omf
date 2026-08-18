@@ -15,6 +15,8 @@ from omf.schema.capabilities import (
     AdminSettings,
     DnsConfig,
     Listen,
+    LocalInPolicy,
+    LocalInPolicyList,
     LoggingConfig,
     NtpConfig,
     Policy,
@@ -349,6 +351,22 @@ def forti_zones(raw: object) -> ZoneList:
     return ZoneList(zones=tuple(zones))
 
 
+def forti_local_in(raw: object, raw6: object | None = None) -> LocalInPolicyList:
+    policies: list[LocalInPolicy] = []
+    for source in (raw, raw6):
+        for index, item in enumerate(_as_records(source)):
+            raw_id = item.get("policyid", item.get("id"))
+            policies.append(
+                LocalInPolicy(
+                    id=str(index) if raw_id is None else str(raw_id),
+                    enabled=_as_bool(item.get("status"), default=True),
+                    action=_ACTION_MAP.get(str(item.get("action") or "").strip().lower(), "other"),
+                    virtual_patch=_as_bool(item.get("virtual-patch"), default=False),
+                )
+            )
+    return LocalInPolicyList(policies=tuple(policies))
+
+
 def forti_ntp(raw: object) -> NtpConfig:
     item = _as_record(raw)
     return NtpConfig(
@@ -601,6 +619,20 @@ class FortinetAdapter:
             elif capability == "zones":
                 raw = self._get("/api/v2/cmdb/system/zone", capability=capability)
                 payload = forti_zones(raw)
+            elif capability == "local_in":
+                local_in_raw = self._get(
+                    "/api/v2/cmdb/firewall/local-in-policy",
+                    capability=capability,
+                )
+                local_in6_raw = self._get(
+                    "/api/v2/cmdb/firewall/local-in-policy6",
+                    capability=capability,
+                    optional=True,
+                )
+                raw = {"/api/v2/cmdb/firewall/local-in-policy": local_in_raw}
+                if local_in6_raw is not None:
+                    raw["/api/v2/cmdb/firewall/local-in-policy6"] = local_in6_raw
+                payload = forti_local_in(local_in_raw, local_in6_raw)
             elif capability == "system_info":
                 raw = self._get("/api/v2/monitor/system/status", capability=capability)
                 payload = forti_system(raw)
@@ -733,6 +765,7 @@ __all__ = [
     "forti_admin_settings",
     "forti_dns",
     "forti_filter",
+    "forti_local_in",
     "forti_logging",
     "forti_ntp",
     "forti_services",

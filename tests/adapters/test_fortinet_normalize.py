@@ -150,3 +150,10 @@ def test_snmp_traps_and_logging_crypto():
     assert log.implicit_policy_logged is False
 
 
+def test_local_in_virtual_patch_disabled():
+    from omf.adapters.fortinet import forti_local_in
+    policies = forti_local_in(load("local_in_policy.json"), None).policies
+    assert policies[0].action == "accept"
+    assert policies[0].virtual_patch is False
+
+

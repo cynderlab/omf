@@ -332,6 +332,28 @@ checks:
     mitigation:
       generic: "Enable logging on every firewall policy and log the implicit deny."
       fortinet: "Set logtraffic all on each policy, and in config log setting set fwpolicy-implicit-log enable."
+  - id: FW-LIP-001
+    title: Local-in policies are present
+    severity: medium
+    applies_to: [fortinet]
+    needs: [local_in]
+    evaluator: local_in_present
+    params:
+      default: {}
+    mitigation:
+      generic: "Add at least one local-in policy."
+      fortinet: "In config firewall local-in-policy, add at least one enabled local-in policy."
+  - id: FW-LIP-002
+    title: Virtual patch is enabled on accept local-in policies
+    severity: high
+    applies_to: [fortinet]
+    needs: [local_in]
+    evaluator: virtual_patch_on_accept
+    params:
+      default: {}
+    mitigation:
+      generic: "Enable virtual patch on every accept local-in policy."
+      fortinet: "On every accept local-in policy, set virtual-patch enable."
   - id: FW-SYS-001
     title: Firmware version is recorded
     severity: info

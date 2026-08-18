@@ -10,6 +10,7 @@ from omf.baseline.evaluators.admin import (
     tls_versions_allowed,
 )
 from omf.baseline.evaluators.logging import faz_encrypted, syslog_encrypted
+from omf.baseline.evaluators.local_in import local_in_present, virtual_patch_on_accept
 from omf.baseline.evaluators.network import intrazone_denied
 from omf.baseline.evaluators.policy import (
     isdb_denies_present,
@@ -20,6 +21,8 @@ from omf.baseline.evaluators.services import wan_mgmt_disabled
 from omf.baseline.evaluators.snmp import snmp_memory_traps, snmp_not_legacy
 from omf.schema.capabilities import (
     AdminSettings,
+    LocalInPolicy,
+    LocalInPolicyList,
     LoggingConfig,
     Policy,
     PolicyList,
@@ -303,4 +306,24 @@ def test_isdb_denies_present():
         ),
     )
     assert isdb_denies_present({"firewall_filter": covered}, params, "fortinet").status == "pass"
+
+
+def test_local_in_present_and_virtual_patch():
+    empty = ev("local_in", LocalInPolicyList(policies=()))
+    assert local_in_present({"local_in": empty}, {}, "fortinet").status == "fail"
+    no_patch = ev(
+        "local_in",
+        LocalInPolicyList(
+            policies=(LocalInPolicy(id="1", enabled=True, action="accept", virtual_patch=False),)
+        ),
+    )
+    assert local_in_present({"local_in": no_patch}, {}, "fortinet").status == "pass"
+    assert virtual_patch_on_accept({"local_in": no_patch}, {}, "fortinet").status == "fail"
+    patched = ev(
+        "local_in",
+        LocalInPolicyList(
+            policies=(LocalInPolicy(id="1", enabled=True, action="accept", virtual_patch=True),)
+        ),
+    )
+    assert virtual_patch_on_accept({"local_in": patched}, {}, "fortinet").status == "pass"
 
