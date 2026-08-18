@@ -12,7 +12,16 @@ import yaml
 from omf.schema import Severity
 
 _BASE = Path(__file__).parent
-_PROFILE_KEYS = ("forbidden_services", "mgmt_services", "default_hostnames")
+_PROFILE_KEYS = (
+    "forbidden_services",
+    "mgmt_services",
+    "default_hostnames",
+    "wan_mgmt",
+    "isdb_inbound",
+    "isdb_outbound",
+    "webfilter_block",
+    "appctrl_block",
+)
 
 
 @dataclass(frozen=True)

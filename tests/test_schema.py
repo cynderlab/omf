@@ -48,3 +48,57 @@ def test_check_result_status_enum():
             capability_refs=(),
             observed={},
         )
+
+
+from omf.schema.capabilities import (
+    ALL_CAPABILITIES,
+    CORE_CAPABILITIES,
+    AdminSettings,
+    HaConfig,
+    LocalInPolicy,
+    Policy,
+    Service,
+    SnmpConfig,
+    UtmConfig,
+    UtmProfile,
+    Zone,
+    ZoneList,
+)
+
+
+def test_core_capabilities_are_the_original_nine():
+    assert CORE_CAPABILITIES == (
+        "users",
+        "admin_settings",
+        "services",
+        "ntp",
+        "dns",
+        "logging",
+        "snmp",
+        "firewall_filter",
+        "system_info",
+    )
+    assert ALL_CAPABILITIES == CORE_CAPABILITIES + ("zones", "local_in", "ha", "utm")
+
+
+def test_admin_settings_optional_l1_defaults():
+    settings = AdminSettings(hostname="fw")
+    assert settings.pre_login_banner is None
+    assert settings.password_min_length is None
+    assert settings.admin_https_ssl_versions == ()
+
+
+def test_service_on_wan_defaults_false():
+    svc = Service(name="https", enabled=True, port=443, listen="restricted")
+    assert svc.on_wan is False
+
+
+def test_new_capability_models_are_frozen():
+    zones = ZoneList(zones=(Zone(name="DMZ", intrazone="deny"),))
+    assert zones.zones[0].intrazone == "deny"
+    ha = HaConfig(mode="standalone")
+    assert ha.monitor_interfaces == ()
+    utm = UtmConfig(profiles=(UtmProfile(name="default", kind="dnsfilter", log_all=True),))
+    assert utm.stitches == ()
+    lip = LocalInPolicy(id="1", enabled=True, action="accept", virtual_patch=False)
+    assert lip.virtual_patch is False

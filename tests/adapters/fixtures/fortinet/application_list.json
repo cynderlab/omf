@@ -1,0 +1,11 @@
+{
+  "results": [
+    {
+      "name": "default",
+      "entries": [
+        {"category": 2, "action": "monitor"},
+        {"category": 6, "action": "allow"}
+      ]
+    }
+  ]
+}

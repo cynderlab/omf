@@ -109,7 +109,7 @@ Log lines: `[collect] GET /rest/user 200 84ms` — method, **path only**, status
 
 Pydantic v2, `ConfigDict(frozen=True, extra="forbid")`. No extras dict on capability payloads. Vendor leftovers stay in `raw/` and never enter evaluators.
 
-Nine capabilities (stable names): `users`, `admin_settings`, `services`, `ntp`, `dns`, `logging`, `snmp`, `firewall_filter`, `system_info`.
+Nine CORE capabilities (stable names): `users`, `admin_settings`, `services`, `ntp`, `dns`, `logging`, `snmp`, `firewall_filter`, `system_info`. Four Fortinet-only extras: `zones`, `local_in`, `ha`, `utm`. `CORE_CAPABILITIES` is the original nine. `ALL_CAPABILITIES` is CORE plus the extras. Fortinet `implemented()` returns ALL. MikroTik returns CORE so extra-dependent checks are SKIPPED.
 
 `collect(capability)` **always** returns the same frozen payload type for every vendor. If the adapter cannot fill that type, the capability is ERROR — not a slightly different JSON. Policy “any” tokens (`*`, empty, `0.0.0.0/0`, `::/0`) normalize to the single token `any` via `adapters/normalize.py`.
 
@@ -117,7 +117,7 @@ Vendor-specific **policy** (default account names, insecure service lists, defau
 
 If two vendors do not share a judgement, use evaluator `params.mode` or two checks with different `applies_to`. Do not `if vendor` inside an adapter to decide a finding. Adapter `if vendor` is only for HTTP/normalize.
 
-Fourteen checks today (`FW-ADM-*`, `FW-SVC-*`, `FW-NTP-001`, `FW-DNS-001`, `FW-LOG-*`, `FW-SNMP-*`, `FW-POL-*`, `FW-SYS-001`). IDs are ours, not CIS. Growing the catalog is additive YAML + evaluator. There is no firmware EOL database; do not invent a minimum-version floor.
+Forty-two checks today (14 MikroTik, 41 Fortinet). `FW-POL-002` is MikroTik-only. IDs are ours, not CIS. Inspired by CIS FortiGate 7.4.x Benchmark v1.0.1 Level 1. Level 2 is out of scope. CIS 2.4.3 is omitted because “correct profile” is org policy. Growing the catalog is additive YAML + evaluator. There is no firmware EOL database; do not invent a minimum-version floor.
 
 ## How to extend
 
@@ -130,7 +130,7 @@ Fourteen checks today (`FW-ADM-*`, `FW-SVC-*`, `FW-NTP-001`, `FW-DNS-001`, `FW-L
 
 **Add a capability:**
 
-1. Frozen payload on `schema/capabilities.py` + `ALL_CAPABILITIES`.
+1. Frozen payload on `schema/capabilities.py` + `ALL_CAPABILITIES` (and `CORE_CAPABILITIES` if only one vendor implements it).
 2. Implement `collect` + normalizer on **both** adapters (or leave unimplemented → dependents SKIPPED).
 3. Fixture JSON under `tests/adapters/fixtures/{mikrotik,fortinet}/`.
 4. TUI and agent stay unchanged.
@@ -208,3 +208,4 @@ Ship catalog YAML in the wheel (`[tool.hatch.build] include = ["src/omf/**/*.yam
 - **TUI events: path only.** Adapter `last_call` must not carry host, query secrets, or `Authorization`.
 - **`config.yaml` is YAML, not TOML.** LLM stays in `.env`.
 - Bump `DISCLAIMER_VERSION` when `DISCLAIMER_TEXT` changes so the prompt is shown again.
+- **HA password** is stripped from Fortinet `raw/` and `HaConfig` before persist. Do not put `password` / `passwd` / `secret` from `system ha` into evidence.

@@ -1,3 +1,25 @@
 forbidden_services: [telnet, ftp, http]
 mgmt_services: [https, ssh, http, telnet]
 default_hostnames: ["FortiGate", ""]
+wan_mgmt: [https, http, ping, ssh, snmp, radius-acct]
+isdb_inbound:
+  - Tor-Exit.Node
+  - Tor-Relay.Node
+  - Censys-Scanner
+  - Shodan-Scanner
+  - Botnet-C&C.Server
+  - Phishing-Phishing.Server
+  - Proxy-Proxy.Server
+  - Spam-Spamming.Server
+  - VPN-Anonymous.VPN
+  - Malicious-Malicious.Server
+isdb_outbound:
+  - Tor-Relay.Node
+  - Botnet-C&C.Server
+  - Phishing-Phishing.Server
+  - Proxy-Proxy.Server
+  - Spam-Spamming.Server
+  - VPN-Anonymous.VPN
+  - Malicious-Malicious.Server
+webfilter_block: [malicious, phishing, spam]
+appctrl_block: [p2p, proxy]

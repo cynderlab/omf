@@ -62,3 +62,17 @@ def services_not_unrestricted(
         capability_refs=("services",),
         observed={"names": hits},
     )
+
+
+def wan_mgmt_disabled(evidence, params, vendor) -> CheckResult:
+    payload = evidence["services"].payload
+    names = {n.lower() for n in params.get("wan_mgmt", ())}
+    hits = [s.name for s in payload.services if s.enabled and s.on_wan and s.name.lower() in names]
+    return CheckResult(
+        check_id="",
+        status="fail" if hits else "pass",
+        severity="high",
+        diagnostic=f"WAN management services {hits!r}" if hits else "WAN has no management services",
+        capability_refs=("services",),
+        observed={"names": hits},
+    )

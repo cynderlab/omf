@@ -6,7 +6,7 @@ from omf.adapters.mikrotik import MikrotikAdapter
 from omf.adapters.fortinet import FortinetAdapter
 from omf.adapters.base import ProbeError, CollectError
 from omf.adapters.factory import build_adapter
-from omf.schema.capabilities import ALL_CAPABILITIES
+from omf.schema.capabilities import ALL_CAPABILITIES, CORE_CAPABILITIES
 
 MT = Path(__file__).parent / "fixtures" / "mikrotik"
 FT = Path(__file__).parent / "fixtures" / "fortinet"
@@ -262,13 +262,24 @@ def test_fortinet_collect_capabilities():
     fixtures = {
         "/api/v2/cmdb/system/admin": "admin.json",
         "/api/v2/cmdb/system/global": "global.json",
+        "/api/v2/cmdb/system/password-policy": "password_policy.json",
         "/api/v2/cmdb/system/interface": "interface.json",
         "/api/v2/cmdb/system/ntp": "ntp.json",
         "/api/v2/cmdb/system/dns": "dns.json",
         "/api/v2/cmdb/log.syslogd/setting": "syslogd.json",
+        "/api/v2/cmdb/log.fortianalyzer/setting": "fortianalyzer.json",
+        "/api/v2/cmdb/log.setting": "log_setting.json",
         "/api/v2/cmdb/system/snmp/community": "snmp_community.json",
         "/api/v2/cmdb/system/snmp/sysinfo": "snmp_sysinfo.json",
+        "/api/v2/cmdb/system/snmp/user": "snmp_user.json",
         "/api/v2/cmdb/firewall/policy": "policy.json",
+        "/api/v2/cmdb/system/zone": "zone.json",
+        "/api/v2/cmdb/firewall/local-in-policy": "local_in_policy.json",
+        "/api/v2/cmdb/system/ha": "ha.json",
+        "/api/v2/cmdb/dnsfilter/profile": "dnsfilter.json",
+        "/api/v2/cmdb/webfilter/profile": "webfilter.json",
+        "/api/v2/cmdb/application/list": "application_list.json",
+        "/api/v2/cmdb/system/automation-stitch": "automation_stitch.json",
         "/api/v2/monitor/system/status": "status.json",
     }
 
@@ -293,6 +304,7 @@ def test_fortinet_collect_capabilities():
     by_name = {s.name: s for s in services.payload.services}
     assert by_name["https"].enabled is True
     assert by_name["https"].listen == "unknown"
+    assert by_name["https"].on_wan is True
     ntp, _ = ad.collect("ntp")
     assert ntp.payload.enabled is True
     dns, _ = ad.collect("dns")
@@ -303,6 +315,18 @@ def test_fortinet_collect_capabilities():
     assert snmp.payload.communities[0].name == "public"
     policies, _ = ad.collect("firewall_filter")
     assert policies.payload.policies[0].src == ("any",)
+    zones, _ = ad.collect("zones")
+    assert zones.payload.zones[0].name == "DMZ"
+    assert zones.payload.zones[0].intrazone == "allow"
+    local_in, _ = ad.collect("local_in")
+    assert local_in.payload.policies[0].virtual_patch is False
+    ha, raw_ha = ad.collect("ha")
+    assert ha.payload.mode == "a-p"
+    assert ha.payload.monitor_interfaces == ("port6", "port7")
+    assert "super-secret" not in str(raw_ha)
+    assert "super-secret" not in str(ha.payload.model_dump())
+    utm, _ = ad.collect("utm")
+    assert utm.payload.stitches[0].name.lower().startswith("compromised")
     system, _ = ad.collect("system_info")
     assert system.payload.firmware.startswith("v7.4")
     assert system.payload.model == "FortiGate"
@@ -347,7 +371,7 @@ def test_build_adapter_dispatch_and_implemented():
     mt_client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://192.0.2.1")
     mt = build_adapter(mt_session(), mt_client)
     assert isinstance(mt, MikrotikAdapter)
-    assert mt.implemented() == frozenset(ALL_CAPABILITIES)
+    assert mt.implemented() == frozenset(CORE_CAPABILITIES)
     ft_client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://192.0.2.2")
     ft = build_adapter(ft_session("tok"), ft_client)
     assert isinstance(ft, FortinetAdapter)
