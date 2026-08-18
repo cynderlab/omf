@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+import time
+from datetime import datetime, timezone
+from typing import Any, Literal, NoReturn
 
+import httpx
+
+from omf.adapters.base import CollectError, ProbeError
 from omf.adapters.normalize import as_any_token
 from omf.schema.capabilities import (
+    ALL_CAPABILITIES,
     AdminSettings,
     DnsConfig,
     Listen,
@@ -20,6 +26,8 @@ from omf.schema.capabilities import (
     User,
     UserList,
 )
+from omf.schema.evidence import Evidence
+from omf.session import Session
 
 _TRUE = frozenset({"true", "yes", "1", "on", "enable", "enabled"})
 _FALSE = frozenset({"false", "no", "0", "off", "disable", "disabled", ""})
@@ -322,7 +330,181 @@ def forti_system(raw: object) -> SystemInfo:
     )
 
 
+class FortinetAdapter:
+    vendor: Literal["fortinet"] = "fortinet"
+
+    def __init__(self, session: Session, client: httpx.Client) -> None:
+        self._session = session
+        self._client = client
+        self.last_call: dict = {}
+        self._logged_in = False
+
+    def probe(self) -> None:
+        self._ensure_session()
+        self._get("/api/v2/monitor/system/status")
+
+    def collect(self, capability: str) -> tuple[Evidence, object]:
+        self._ensure_session(capability=capability)
+        if capability == "users":
+            raw: object = self._get("/api/v2/cmdb/system/admin", capability=capability)
+            payload: object = forti_users(raw)
+        elif capability == "admin_settings":
+            global_raw = self._get("/api/v2/cmdb/system/global", capability=capability)
+            admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)
+            raw = {
+                "/api/v2/cmdb/system/global": global_raw,
+                "/api/v2/cmdb/system/admin": admin_raw,
+            }
+            payload = forti_admin_settings(global_raw, admin_raw)
+        elif capability == "services":
+            interface_raw = self._get("/api/v2/cmdb/system/interface", capability=capability)
+            admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)
+            raw = {
+                "/api/v2/cmdb/system/interface": interface_raw,
+                "/api/v2/cmdb/system/admin": admin_raw,
+            }
+            payload = forti_services(interface_raw, admin_raw)
+        elif capability == "ntp":
+            raw = self._get("/api/v2/cmdb/system/ntp", capability=capability)
+            payload = forti_ntp(raw)
+        elif capability == "dns":
+            raw = self._get("/api/v2/cmdb/system/dns", capability=capability)
+            payload = forti_dns(raw)
+        elif capability == "logging":
+            syslogd = self._get("/api/v2/cmdb/log.syslogd/setting", capability=capability)
+            syslogd2 = self._get(
+                "/api/v2/cmdb/log.syslogd2/setting",
+                capability=capability,
+                optional=True,
+            )
+            raw = {"/api/v2/cmdb/log.syslogd/setting": syslogd}
+            if syslogd2 is not None:
+                raw["/api/v2/cmdb/log.syslogd2/setting"] = syslogd2
+            payload = forti_logging(syslogd, syslogd2)
+        elif capability == "snmp":
+            community_raw = self._get(
+                "/api/v2/cmdb/system/snmp/community",
+                capability=capability,
+            )
+            sysinfo_raw = self._get(
+                "/api/v2/cmdb/system/snmp/sysinfo",
+                capability=capability,
+            )
+            raw = {
+                "/api/v2/cmdb/system/snmp/community": community_raw,
+                "/api/v2/cmdb/system/snmp/sysinfo": sysinfo_raw,
+            }
+            payload = forti_snmp(sysinfo_raw, community_raw)
+        elif capability == "firewall_filter":
+            raw = self._get("/api/v2/cmdb/firewall/policy", capability=capability)
+            payload = forti_filter(raw)
+        elif capability == "system_info":
+            raw = self._get("/api/v2/monitor/system/status", capability=capability)
+            payload = forti_system(raw)
+        else:
+            raise CollectError(capability, "", None, f"unknown capability: {capability}")
+        return (
+            Evidence(
+                capability=capability,
+                vendor=self.vendor,
+                collected_at=datetime.now(timezone.utc),
+                payload=payload,
+            ),
+            raw,
+        )
+
+    def implemented(self) -> frozenset[str]:
+        return frozenset(ALL_CAPABILITIES)
+
+    def close(self) -> None:
+        if self._logged_in:
+            try:
+                self._request("GET", "/logout")
+            except httpx.RequestError:
+                pass
+        self._client.close()
+
+    def _has_token(self) -> bool:
+        return bool(self._session.token)
+
+    def _ensure_session(self, *, capability: str | None = None) -> None:
+        if self._has_token() or self._logged_in:
+            return
+        try:
+            # FortiOS logincheck expects form fields username + secretkey.
+            response = self._request(
+                "POST",
+                "/logincheck",
+                data={
+                    "username": self._session.username,
+                    "secretkey": self._session.password,
+                },
+            )
+        except httpx.RequestError as exc:
+            _raise_http("/logincheck", None, str(exc), capability)
+        if not 200 <= response.status_code < 300:
+            _raise_http(
+                "/logincheck",
+                response.status_code,
+                f"POST /logincheck returned {response.status_code}",
+                capability,
+            )
+        self._logged_in = True
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        headers = dict(kwargs.pop("headers", None) or {})
+        if self._has_token():
+            headers.setdefault("Authorization", f"Bearer {self._session.token}")
+        started = time.perf_counter()
+        status: int | None = None
+        try:
+            response = self._client.request(method, path, headers=headers, **kwargs)
+            status = response.status_code
+            return response
+        finally:
+            self.last_call = {
+                "method": method,
+                "path": path,
+                "status": status,
+                "ms": int((time.perf_counter() - started) * 1000),
+            }
+
+    def _get(
+        self,
+        path: str,
+        *,
+        capability: str | None = None,
+        optional: bool = False,
+    ) -> object:
+        try:
+            response = self._request("GET", path)
+        except httpx.RequestError as exc:
+            _raise_http(path, None, str(exc), capability)
+        if optional and response.status_code == 404:
+            return None
+        if not 200 <= response.status_code < 300:
+            _raise_http(
+                path,
+                response.status_code,
+                f"GET {path} returned {response.status_code}",
+                capability,
+            )
+        return response.json()
+
+
+def _raise_http(
+    path: str,
+    status: int | None,
+    message: str,
+    capability: str | None,
+) -> NoReturn:
+    if capability is None:
+        raise ProbeError(path, status, message)
+    raise CollectError(capability, path, status, message)
+
+
 __all__ = [
+    "FortinetAdapter",
     "forti_admin_settings",
     "forti_dns",
     "forti_filter",

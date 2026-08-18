@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+import time
+from datetime import datetime, timezone
+from typing import Any, Literal, NoReturn
 
+import httpx
+
+from omf.adapters.base import CollectError, ProbeError
 from omf.adapters.normalize import as_any_token
 from omf.schema.capabilities import (
+    ALL_CAPABILITIES,
     AdminSettings,
     DnsConfig,
     LoggingConfig,
@@ -20,6 +26,8 @@ from omf.schema.capabilities import (
     User,
     UserList,
 )
+from omf.schema.evidence import Evidence
+from omf.session import Session
 
 _TIMEOUT_RE = re.compile(r"^(\d+)([smhSMH])?$")
 _TRUE = frozenset({"true", "yes", "1", "on"})
@@ -252,7 +260,122 @@ def mikrotik_system(raw: object) -> SystemInfo:
     )
 
 
+class MikrotikAdapter:
+    vendor: Literal["mikrotik"] = "mikrotik"
+
+    def __init__(self, session: Session, client: httpx.Client) -> None:
+        self._session = session
+        self._client = client
+        self.last_call: dict = {}
+
+    def probe(self) -> None:
+        self._get("/rest/system/identity")
+
+    def collect(self, capability: str) -> tuple[Evidence, object]:
+        if capability == "users":
+            raw: object = self._get("/rest/user", capability=capability)
+            payload: object = mikrotik_users(raw)
+        elif capability == "admin_settings":
+            identity = self._get("/rest/system/identity", capability=capability)
+            settings = self._get("/rest/user/settings", capability=capability)
+            raw = {
+                "/rest/system/identity": identity,
+                "/rest/user/settings": settings,
+            }
+            payload = mikrotik_admin_settings(identity, settings)
+        elif capability == "services":
+            raw = self._get("/rest/ip/service", capability=capability)
+            payload = mikrotik_services(raw)
+        elif capability == "ntp":
+            raw = self._get("/rest/system/ntp/client", capability=capability)
+            payload = mikrotik_ntp(raw)
+        elif capability == "dns":
+            raw = self._get("/rest/ip/dns", capability=capability)
+            payload = mikrotik_dns(raw)
+        elif capability == "logging":
+            rules = self._get("/rest/system/logging", capability=capability)
+            actions = self._get("/rest/system/logging/action", capability=capability)
+            raw = {
+                "/rest/system/logging": rules,
+                "/rest/system/logging/action": actions,
+            }
+            payload = mikrotik_logging(rules, actions)
+        elif capability == "snmp":
+            snmp = self._get("/rest/snmp", capability=capability)
+            communities = self._get("/rest/snmp/community", capability=capability)
+            raw = {"/rest/snmp": snmp, "/rest/snmp/community": communities}
+            payload = mikrotik_snmp(snmp, communities)
+        elif capability == "firewall_filter":
+            raw = self._get("/rest/ip/firewall/filter", capability=capability)
+            payload = mikrotik_filter(raw)
+        elif capability == "system_info":
+            raw = self._get("/rest/system/resource", capability=capability)
+            payload = mikrotik_system(raw)
+        else:
+            raise CollectError(capability, "", None, f"unknown capability: {capability}")
+        return (
+            Evidence(
+                capability=capability,
+                vendor=self.vendor,
+                collected_at=datetime.now(timezone.utc),
+                payload=payload,
+            ),
+            raw,
+        )
+
+    def implemented(self) -> frozenset[str]:
+        return frozenset(ALL_CAPABILITIES)
+
+    def close(self) -> None:
+        self._client.close()
+
+    def _request(self, method: str, path: str) -> httpx.Response:
+        started = time.perf_counter()
+        status: int | None = None
+        try:
+            response = self._client.request(
+                method,
+                path,
+                auth=httpx.BasicAuth(self._session.username, self._session.password),
+            )
+            status = response.status_code
+            return response
+        finally:
+            self.last_call = {
+                "method": method,
+                "path": path,
+                "status": status,
+                "ms": int((time.perf_counter() - started) * 1000),
+            }
+
+    def _get(self, path: str, *, capability: str | None = None) -> object:
+        try:
+            response = self._request("GET", path)
+        except httpx.RequestError as exc:
+            _raise_http(path, None, str(exc), capability)
+        if not 200 <= response.status_code < 300:
+            _raise_http(
+                path,
+                response.status_code,
+                f"GET {path} returned {response.status_code}",
+                capability,
+            )
+        return response.json()
+
+
+def _raise_http(
+    path: str,
+    status: int | None,
+    message: str,
+    capability: str | None,
+) -> NoReturn:
+    if capability is None:
+        raise ProbeError(path, status, message)
+    raise CollectError(capability, path, status, message)
+
+
 __all__ = [
+    "MikrotikAdapter",
     "mikrotik_admin_settings",
     "mikrotik_dns",
     "mikrotik_filter",
