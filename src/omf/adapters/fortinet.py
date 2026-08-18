@@ -91,8 +91,16 @@ def _allowaccess_tokens(value: object) -> set[str]:
     return {part for part in parts if part}
 
 
+def _is_trusthost_key(key: object) -> bool:
+    return str(key).lower().startswith("trusthost")
+
+
+def _has_trusthost_keys(item: dict[str, Any]) -> bool:
+    return any(_is_trusthost_key(key) for key in item)
+
+
 def _trusthost_values(item: dict[str, Any]) -> list[object]:
-    return [value for key, value in item.items() if str(key).lower().startswith("trusthost")]
+    return [value for key, value in item.items() if _is_trusthost_key(key)]
 
 
 def _trusthost_is_restricted(value: object) -> bool:
@@ -107,6 +115,8 @@ def _trusthost_is_restricted(value: object) -> bool:
 
 
 def _services_listen(admins: list[dict[str, Any]]) -> Listen:
+    if not any(_has_trusthost_keys(item) for item in admins):
+        return "unknown"
     enabled = [item for item in admins if _admin_enabled(item)]
     if not enabled:
         return "unknown"

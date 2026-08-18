@@ -13,12 +13,17 @@ def load(name: str):
 def test_users_default_admin():
     assert forti_users(load("admin.json")).users[0].name == "admin"
 
-def test_services_listen_all_without_trusthost():
+def test_services_listen_unknown_without_trusthost():
     svc = forti_services(load("interface.json"), load("admin.json"))
     by_name = {s.name: s for s in svc.services}
     assert by_name["https"].enabled is True
-    assert by_name["https"].listen == "all"
+    assert by_name["https"].listen == "unknown"
     assert by_name["http"].enabled is True
+
+def test_services_listen_all_with_any_trusthost():
+    svc = forti_services(load("interface.json"), load("admin_unrestricted.json"))
+    by_name = {s.name: s for s in svc.services}
+    assert by_name["https"].listen == "all"
 
 def test_filter_all_becomes_any():
     policies = forti_filter(load("policy.json"))
