@@ -32,6 +32,14 @@ def test_filter_all_becomes_any():
     assert policies.policies[0].service == ("any",)
     assert policies.policies[0].action == "accept"
 
+
+def test_filter_l1_fields():
+    policy = forti_filter(load("policy.json")).policies[0]
+    assert policy.service == ("any",)
+    assert policy.log is False
+    assert policy.internet_src == ()
+    assert policy.ips_sensor is None
+
 def test_ntp_dns_log_snmp_system_admin():
     assert forti_ntp(load("ntp.json")).enabled is True
     assert forti_dns(load("dns.json")).servers[0] == "1.1.1.1"

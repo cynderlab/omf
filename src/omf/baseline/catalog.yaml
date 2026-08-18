@@ -299,6 +299,39 @@ checks:
     mitigation:
       generic: "Add a final drop/deny rule so unmatched traffic is explicitly denied."
       mikrotik: "Add a last /ip/firewall/filter rule with action=drop."
+  - id: FW-POL-003
+    title: Policies do not use ALL as service
+    severity: high
+    applies_to: [fortinet]
+    needs: [firewall_filter]
+    evaluator: no_unrestricted_service
+    params:
+      default: {}
+    mitigation:
+      generic: "Replace unrestricted ALL/any service selections with explicit service objects."
+      fortinet: "In each firewall policy, replace service ALL with the specific services required."
+  - id: FW-POL-004
+    title: ISDB deny policies cover Tor and malicious services
+    severity: high
+    applies_to: [fortinet]
+    needs: [firewall_filter]
+    evaluator: isdb_denies_present
+    params:
+      default: {}
+    mitigation:
+      generic: "Add deny policies that cover the required inbound and outbound Internet Service Database entries."
+      fortinet: "Create enabled deny policies whose internet-service-src and internet-service destinations cover the CIS 7.4.5 ISDB name sets."
+  - id: FW-POL-005
+    title: Logging is enabled on policies and implicit deny
+    severity: medium
+    applies_to: [fortinet]
+    needs: [firewall_filter, logging]
+    evaluator: policies_logged
+    params:
+      default: {}
+    mitigation:
+      generic: "Enable logging on every firewall policy and log the implicit deny."
+      fortinet: "Set logtraffic all on each policy, and in config log setting set fwpolicy-implicit-log enable."
   - id: FW-SYS-001
     title: Firmware version is recorded
     severity: info

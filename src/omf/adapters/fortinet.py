@@ -409,10 +409,54 @@ def forti_snmp(sysinfo_raw: object, community_raw: object, user_raw: object | No
     )
 
 
+def _optional_name(value: object) -> str | None:
+    if value in (None, "", "none"):
+        return None
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return None
+        value = value[0]
+    if isinstance(value, dict):
+        text = str(value.get("name") or "").strip()
+        return text or None
+    text = str(value).strip()
+    return text or None
+
+
+def _internet_names(item: dict[str, Any], *keys: str) -> tuple[str, ...]:
+    names: list[str] = []
+    for key in keys:
+        raw = item.get(key)
+        if raw in (None, "", False, 0):
+            continue
+        if isinstance(raw, (list, tuple)):
+            for entry in raw:
+                if isinstance(entry, dict):
+                    text = str(entry.get("name") or entry.get("internet-service-name") or "").strip()
+                else:
+                    text = str(entry).strip()
+                if text:
+                    names.append(text)
+        elif isinstance(raw, dict):
+            text = str(raw.get("name") or "").strip()
+            if text:
+                names.append(text)
+        else:
+            text = str(raw).strip()
+            if text and text.lower() not in {"enable", "disable", "true", "false"}:
+                names.append(text)
+    return tuple(names)
+
+
 def forti_filter(raw: object) -> PolicyList:
     policies: list[Policy] = []
     for index, item in enumerate(_as_records(raw)):
         raw_id = item.get("policyid", item.get("id"))
+        log_raw = str(item.get("logtraffic") or "").strip().lower()
+        log = None if "logtraffic" not in item else log_raw in {"all", "utm", "enable", "true"}
+        if str(item.get("action") or "").strip().lower() == "accept":
+            if "logtraffic" in item:
+                log = log_raw == "all"
         policies.append(
             Policy(
                 id=str(index) if raw_id is None else str(raw_id),
@@ -421,6 +465,17 @@ def forti_filter(raw: object) -> PolicyList:
                 src=_named_tokens(item.get("srcaddr")),
                 dst=_named_tokens(item.get("dstaddr")),
                 service=_named_tokens(item.get("service")),
+                log=log,
+                ips_sensor=_optional_name(item.get("ips-sensor")),
+                dnsfilter_profile=_optional_name(item.get("dnsfilter-profile")),
+                webfilter_profile=_optional_name(item.get("webfilter-profile")),
+                application_list=_optional_name(item.get("application-list")),
+                internet_src=_internet_names(
+                    item, "internet-service-src-name", "internet-service-src", "internet-service-src-id"
+                ),
+                internet_dst=_internet_names(
+                    item, "internet-service-name", "internet-service", "internet-service-id"
+                ),
             )
         )
     return PolicyList(policies=tuple(policies))

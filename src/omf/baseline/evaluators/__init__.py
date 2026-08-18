@@ -22,7 +22,13 @@ from omf.baseline.evaluators.logging import (
 )
 from omf.baseline.evaluators.network import intrazone_denied
 from omf.baseline.evaluators.ntp_dns import dns_configured, ntp_configured
-from omf.baseline.evaluators.policy import explicit_deny_present, no_any_any_accept
+from omf.baseline.evaluators.policy import (
+    explicit_deny_present,
+    isdb_denies_present,
+    no_any_any_accept,
+    no_unrestricted_service,
+    policies_logged,
+)
 from omf.baseline.evaluators.services import (
     insecure_services_disabled,
     services_not_unrestricted,
@@ -60,6 +66,9 @@ REGISTRY: dict[str, Evaluator] = {
     "snmp_memory_traps": snmp_memory_traps,
     "no_any_any_accept": no_any_any_accept,
     "explicit_deny_present": explicit_deny_present,
+    "no_unrestricted_service": no_unrestricted_service,
+    "isdb_denies_present": isdb_denies_present,
+    "policies_logged": policies_logged,
     "firmware_present": firmware_present,
     "intrazone_denied": intrazone_denied,
 }

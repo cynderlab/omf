@@ -11,11 +11,18 @@ from omf.baseline.evaluators.admin import (
 )
 from omf.baseline.evaluators.logging import faz_encrypted, syslog_encrypted
 from omf.baseline.evaluators.network import intrazone_denied
+from omf.baseline.evaluators.policy import (
+    isdb_denies_present,
+    no_unrestricted_service,
+    policies_logged,
+)
 from omf.baseline.evaluators.services import wan_mgmt_disabled
 from omf.baseline.evaluators.snmp import snmp_memory_traps, snmp_not_legacy
 from omf.schema.capabilities import (
     AdminSettings,
     LoggingConfig,
+    Policy,
+    PolicyList,
     Service,
     ServiceList,
     SnmpConfig,
@@ -185,4 +192,115 @@ def test_syslog_and_faz_encrypted():
         ),
     )
     assert faz_encrypted({"logging": faz_bad}, {}, "fortinet").status == "fail"
+
+
+def test_no_unrestricted_service_fails_on_any():
+    bad = ev(
+        "firewall_filter",
+        PolicyList(
+            policies=(
+                Policy(
+                    id="1",
+                    enabled=True,
+                    action="accept",
+                    src=("any",),
+                    dst=("any",),
+                    service=("any",),
+                    log=False,
+                ),
+            )
+        ),
+    )
+    assert no_unrestricted_service({"firewall_filter": bad}, {}, "fortinet").status == "fail"
+
+
+def test_policies_logged_requires_policy_and_implicit():
+    unlogged = ev(
+        "firewall_filter",
+        PolicyList(
+            policies=(
+                Policy(
+                    id="1",
+                    enabled=True,
+                    action="accept",
+                    src=("lan",),
+                    dst=("wan",),
+                    service=("HTTPS",),
+                    log=False,
+                ),
+            )
+        ),
+    )
+    implicit_off = ev("logging", LoggingConfig(local_enabled=True, remote_targets=(), implicit_policy_logged=False))
+    assert policies_logged({"firewall_filter": unlogged, "logging": implicit_off}, {}, "fortinet").status == "fail"
+    logged = ev(
+        "firewall_filter",
+        PolicyList(
+            policies=(
+                Policy(
+                    id="1",
+                    enabled=True,
+                    action="accept",
+                    src=("lan",),
+                    dst=("wan",),
+                    service=("HTTPS",),
+                    log=True,
+                ),
+            )
+        ),
+    )
+    assert policies_logged({"firewall_filter": logged, "logging": implicit_off}, {}, "fortinet").status == "fail"
+    implicit_on = ev("logging", LoggingConfig(local_enabled=True, remote_targets=(), implicit_policy_logged=True))
+    assert policies_logged({"firewall_filter": logged, "logging": implicit_on}, {}, "fortinet").status == "pass"
+
+
+def test_isdb_denies_present():
+    params = {
+        "isdb_inbound": ["Tor-Exit.Node", "Shodan-Scanner"],
+        "isdb_outbound": ["Tor-Relay.Node", "Botnet-C&C.Server"],
+    }
+    empty = ev(
+        "firewall_filter",
+        PolicyList(
+            policies=(
+                Policy(
+                    id="1",
+                    enabled=True,
+                    action="deny",
+                    src=("any",),
+                    dst=("any",),
+                    service=("any",),
+                    internet_src=(),
+                    internet_dst=(),
+                ),
+            )
+        ),
+    )
+    assert isdb_denies_present({"firewall_filter": empty}, params, "fortinet").status == "fail"
+    covered = ev(
+        "firewall_filter",
+        PolicyList(
+            policies=(
+                Policy(
+                    id="10",
+                    enabled=True,
+                    action="deny",
+                    src=("any",),
+                    dst=("any",),
+                    service=("ALL",),
+                    internet_src=("Tor-Exit.Node", "Shodan-Scanner", "Extra"),
+                ),
+                Policy(
+                    id="11",
+                    enabled=True,
+                    action="drop",
+                    src=("any",),
+                    dst=("any",),
+                    service=("ALL",),
+                    internet_dst=("Tor-Relay.Node", "Botnet-C&C.Server"),
+                ),
+            )
+        ),
+    )
+    assert isdb_denies_present({"firewall_filter": covered}, params, "fortinet").status == "pass"
 
