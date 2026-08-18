@@ -19,7 +19,8 @@ def run_tui() -> int:
 
 
 def run_doctor() -> int:
-    raise SystemExit("doctor not implemented")
+    from omf.doctor import run
+    return run()
 
 
 def main(argv: list[str] | None = None) -> int:
