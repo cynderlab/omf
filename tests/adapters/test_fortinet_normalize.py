@@ -101,3 +101,20 @@ def test_forti_system_envelope_version_wins():
     from_results = forti_system({"results": {"version": "v7.4.1", "model": "FGT_VM64"}})
     assert from_results.firmware == "v7.4.1"
     assert from_results.model == "FGT_VM64"
+
+
+def test_admin_settings_l1_fields():
+    admin = forti_admin_settings(load("global.json"), load("admin.json"), load("password_policy.json"))
+    assert admin.pre_login_banner is False
+    assert admin.post_login_banner is False
+    assert admin.timezone == "US/Pacific"
+    assert admin.admin_https_ssl_versions == ("tlsv1-2", "tlsv1-3")
+    assert admin.log_single_cpu_high is False
+    assert admin.password_policy_enabled is False
+    assert admin.password_min_length == 8
+    assert admin.admin_lockout_threshold == 5
+    assert admin.admin_lockout_duration == 1800
+    assert admin.admin_http_port == 80
+    assert admin.admin_https_port == 443
+    assert admin.admin_https_redirect is True
+

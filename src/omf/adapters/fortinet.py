@@ -247,15 +247,53 @@ def forti_users(raw: object) -> UserList:
     return UserList(users=tuple(users))
 
 
-def forti_admin_settings(global_raw: object, admin_raw: object) -> AdminSettings:
+def _tokens(value: object) -> tuple[str, ...]:
+    if value in (None, ""):
+        return ()
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    return tuple(part for part in str(value).replace(",", " ").split() if part)
+
+
+def _as_int(value: object) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def forti_admin_settings(
+    global_raw: object,
+    admin_raw: object,
+    password_policy_raw: object | None = None,
+) -> AdminSettings:
     _ = admin_raw
     item = _as_record(global_raw)
+    policy = _as_record(password_policy_raw)
     timeout_raw = item.get("admintimeout")
     return AdminSettings(
         hostname=str(item.get("hostname") or ""),
-        idle_timeout_seconds=_idle_timeout_seconds(timeout_raw)
-        if timeout_raw is not None
-        else None,
+        idle_timeout_seconds=_idle_timeout_seconds(timeout_raw) if timeout_raw is not None else None,
+        pre_login_banner=_as_bool(item.get("pre-login-banner"), default=False) if "pre-login-banner" in item else None,
+        post_login_banner=_as_bool(item.get("post-login-banner"), default=False) if "post-login-banner" in item else None,
+        timezone=(str(item.get("timezone")).strip() if item.get("timezone") not in (None, "") else None),
+        admin_https_ssl_versions=_tokens(item.get("admin-https-ssl-versions")),
+        log_single_cpu_high=_as_bool(item.get("log-single-cpu-high"), default=False) if "log-single-cpu-high" in item else None,
+        password_policy_enabled=_as_bool(policy.get("status"), default=False) if policy else None,
+        password_min_length=_as_int(policy.get("minimum-length")) if policy else None,
+        password_apply_to=_tokens(policy.get("apply-to")) if policy else (),
+        admin_lockout_threshold=_as_int(item.get("admin-lockout-threshold")),
+        admin_lockout_duration=_as_int(item.get("admin-lockout-duration")),
+        admin_http_port=_as_int(item.get("admin-port")),
+        admin_https_port=_as_int(item.get("admin-sport")),
+        admin_https_redirect=_as_bool(item.get("admin-https-redirect"), default=False) if "admin-https-redirect" in item else None,
     )
 
 
@@ -368,11 +406,16 @@ class FortinetAdapter:
             elif capability == "admin_settings":
                 global_raw = self._get("/api/v2/cmdb/system/global", capability=capability)
                 admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)
+                password_policy_raw = self._get(
+                    "/api/v2/cmdb/system/password-policy",
+                    capability=capability,
+                )
                 raw = {
                     "/api/v2/cmdb/system/global": global_raw,
                     "/api/v2/cmdb/system/admin": admin_raw,
+                    "/api/v2/cmdb/system/password-policy": password_policy_raw,
                 }
-                payload = forti_admin_settings(global_raw, admin_raw)
+                payload = forti_admin_settings(global_raw, admin_raw, password_policy_raw)
             elif capability == "services":
                 interface_raw = self._get("/api/v2/cmdb/system/interface", capability=capability)
                 admin_raw = self._get("/api/v2/cmdb/system/admin", capability=capability)

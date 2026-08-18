@@ -55,6 +55,11 @@ def test_idle_timeout_zero_fails():
     assert idle_timeout_set(evidence, {}, "mikrotik").status == "fail"
 
 
+def test_idle_timeout_above_max_fails():
+    evidence = {"admin_settings": ev("admin_settings", AdminSettings(hostname="fw", idle_timeout_seconds=1200))}
+    assert idle_timeout_set(evidence, {"max_seconds": 900}, "fortinet").status == "fail"
+
+
 def test_hostname_default_fails():
     evidence = {"admin_settings": ev("admin_settings", AdminSettings(hostname="MikroTik"))}
     r = hostname_not_default(evidence, {"default_hostnames": ["MikroTik", ""]}, "mikrotik")

@@ -26,8 +26,11 @@ checks:
     evaluator: idle_timeout_set
     params:
       default: {}
+      fortinet:
+        max_seconds: 900
     mitigation:
       generic: "Configure a non-zero administrative idle timeout."
+      fortinet: "In config system global, set admintimeout to 15 minutes or less."
   - id: FW-ADM-003
     title: Device identity is not the factory default
     severity: low
@@ -38,6 +41,104 @@ checks:
       default: {}
     mitigation:
       generic: "Set a unique hostname that identifies the device and site."
+  - id: FW-ADM-004
+    title: Pre-login banner is enabled
+    severity: medium
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: banner_enabled
+    params:
+      default:
+        field: pre_login_banner
+    mitigation:
+      generic: "Enable a pre-login legal banner on the administrative login page."
+      fortinet: "In config system global, set pre-login-banner enable. Edit the pre-login replacement message so it is a warning, not a welcome."
+  - id: FW-ADM-005
+    title: Post-login banner is enabled
+    severity: medium
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: banner_enabled
+    params:
+      default:
+        field: post_login_banner
+    mitigation:
+      generic: "Enable a post-login banner that the administrator must acknowledge."
+      fortinet: "In config system global, set post-login-banner enable."
+  - id: FW-ADM-006
+    title: Timezone is configured
+    severity: low
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: timezone_set
+    params:
+      default: {}
+    mitigation:
+      generic: "Set the device timezone to the site local zone so logs and certificates line up."
+      fortinet: "In config system global, set timezone to the site zone id."
+  - id: FW-ADM-007
+    title: Management GUI uses TLS 1.3 only
+    severity: high
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: tls_versions_allowed
+    params:
+      default:
+        allowed: [tlsv1-3]
+    mitigation:
+      generic: "Restrict the administrative HTTPS listener to TLS 1.3."
+      fortinet: "In config system global, set admin-https-ssl-versions tlsv1-3."
+  - id: FW-ADM-008
+    title: Single CPU core high usage is logged
+    severity: medium
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: flag_enabled
+    params:
+      default:
+        field: log_single_cpu_high
+    mitigation:
+      generic: "Log an event when any single CPU core exceeds the usage threshold."
+      fortinet: "In config system global, set log-single-cpu-high enable."
+  - id: FW-ADM-009
+    title: Administrator password policy meets length 14
+    severity: high
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: password_policy_strong
+    params:
+      default:
+        min_length: 14
+        apply_to: [admin-password]
+    mitigation:
+      generic: "Enable a password policy with minimum length 14 for administrator passwords."
+      fortinet: "In config system password-policy, set status enable, apply-to admin-password, and minimum-length 14."
+  - id: FW-ADM-010
+    title: Administrator lockout threshold and duration are bounded
+    severity: medium
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: lockout_configured
+    params:
+      default:
+        max_threshold: 3
+        max_duration: 900
+    mitigation:
+      generic: "Lock an admin source after at most 3 failures for at most 900 seconds."
+      fortinet: "In config system global, set admin-lockout-threshold 3 and admin-lockout-duration 900."
+  - id: FW-ADM-011
+    title: Default administrative HTTP and HTTPS ports are changed
+    severity: medium
+    applies_to: [fortinet]
+    needs: [admin_settings]
+    evaluator: admin_ports_changed
+    params:
+      default:
+        forbidden_http: 80
+        forbidden_https: 443
+    mitigation:
+      generic: "Move administrative HTTP/HTTPS off 80/443 and disable HTTP-to-HTTPS redirect that still binds 80."
+      fortinet: "In config system global, set admin-https-redirect disable, set admin-port to a non-80 port, and set admin-sport to a non-443 port. Avoid 8080, 8081, 4433, and 10443."
   - id: FW-SVC-001
     title: Insecure management services are disabled
     severity: high

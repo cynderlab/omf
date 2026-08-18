@@ -262,6 +262,7 @@ def test_fortinet_collect_capabilities():
     fixtures = {
         "/api/v2/cmdb/system/admin": "admin.json",
         "/api/v2/cmdb/system/global": "global.json",
+        "/api/v2/cmdb/system/password-policy": "password_policy.json",
         "/api/v2/cmdb/system/interface": "interface.json",
         "/api/v2/cmdb/system/ntp": "ntp.json",
         "/api/v2/cmdb/system/dns": "dns.json",
