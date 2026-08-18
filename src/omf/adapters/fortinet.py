@@ -13,6 +13,7 @@ from omf.adapters.normalize import as_any_token
 from omf.schema.capabilities import (
     ALL_CAPABILITIES,
     AdminSettings,
+    AutomationStitch,
     DnsConfig,
     HaConfig,
     Listen,
@@ -31,6 +32,8 @@ from omf.schema.capabilities import (
     SystemInfo,
     User,
     UserList,
+    UtmConfig,
+    UtmProfile,
     Zone,
     ZoneList,
 )
@@ -545,6 +548,123 @@ def _first_present(*values: object) -> str | None:
     return None
 
 
+_WEB_CAT = {
+    "26": "malicious",
+    "61": "phishing",
+    "86": "spam",
+    "7": "dynamic-dns",
+}
+_APP_CAT = {
+    "2": "p2p",
+    "6": "proxy",
+}
+_CAT_ALIASES = (
+    ("malicious", "malicious"),
+    ("phishing", "phishing"),
+    ("spam", "spam"),
+    ("dynamic-dns", "dynamic-dns"),
+    ("dynamic dns", "dynamic-dns"),
+    ("p2p", "p2p"),
+    ("proxy", "proxy"),
+)
+_BLOCK_ACTIONS = frozenset({"block", "deny"})
+_ALLOW_ACTIONS = frozenset({"allow", "pass"})
+
+
+def _table_rows(raw: object) -> list[dict[str, Any]]:
+    if isinstance(raw, dict):
+        nested = raw.get("")
+        if isinstance(nested, list):
+            return _as_records(nested)
+        if raw and all(str(key) == "" or str(key).isdigit() for key in raw):
+            return _as_records([value for value in raw.values() if isinstance(value, dict)])
+    return _as_records(raw)
+
+
+def _cat_token(value: object, mapping: dict[str, str]) -> str | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return mapping.get(str(int(value)))
+    text = str(value).strip()
+    if not text:
+        return None
+    if text in mapping:
+        return mapping[text]
+    lowered = text.lower()
+    tokens = set(mapping.values())
+    if lowered in tokens:
+        return lowered
+    for needle, token in _CAT_ALIASES:
+        if needle in lowered and token in tokens:
+            return token
+    return None
+
+
+def _split_categories(
+    rows: list[dict[str, Any]],
+    mapping: dict[str, str],
+    *,
+    allow: bool,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    blocked: list[str] = []
+    allowed: list[str] = []
+    for row in rows:
+        token = _cat_token(row.get("category"), mapping)
+        if token is None:
+            continue
+        action = str(row.get("action") or "").strip().lower()
+        if action in _BLOCK_ACTIONS:
+            blocked.append(token)
+        elif allow and action in _ALLOW_ACTIONS:
+            allowed.append(token)
+    return tuple(dict.fromkeys(blocked)), tuple(dict.fromkeys(allowed))
+
+
+def forti_utm(
+    dnsfilter_raw: object,
+    webfilter_raw: object,
+    application_list_raw: object,
+    automation_stitch_raw: object,
+) -> UtmConfig:
+    profiles: list[UtmProfile] = []
+    for item in _as_records(dnsfilter_raw):
+        log_all = _as_bool(item.get("log-all-domain"), default=False) or _as_bool(
+            item.get("log-all"), default=False
+        )
+        profiles.append(
+            UtmProfile(name=str(item.get("name") or ""), kind="dnsfilter", log_all=log_all)
+        )
+    for item in _as_records(webfilter_raw):
+        ftgd = item.get("ftgd-wf") if isinstance(item.get("ftgd-wf"), dict) else {}
+        blocked, _allowed = _split_categories(_table_rows(ftgd.get("filters")), _WEB_CAT, allow=False)
+        profiles.append(
+            UtmProfile(
+                name=str(item.get("name") or ""),
+                kind="webfilter",
+                blocked_categories=blocked,
+            )
+        )
+    for item in _as_records(application_list_raw):
+        blocked, allowed = _split_categories(_table_rows(item.get("entries")), _APP_CAT, allow=True)
+        profiles.append(
+            UtmProfile(
+                name=str(item.get("name") or ""),
+                kind="appctrl",
+                blocked_categories=blocked,
+                allowed_categories=allowed,
+            )
+        )
+    stitches = [
+        AutomationStitch(
+            name=str(item.get("name") or ""),
+            enabled=_as_bool(item.get("status"), default=False),
+        )
+        for item in _as_records(automation_stitch_raw)
+    ]
+    return UtmConfig(profiles=tuple(profiles), stitches=tuple(stitches))
+
+
 def forti_system(raw: object) -> SystemInfo:
     # FortiOS monitor envelopes keep version/serial next to results.
     envelope = raw if isinstance(raw, dict) else {}
@@ -672,6 +792,37 @@ class FortinetAdapter:
             elif capability == "ha":
                 raw = _drop_secrets(self._get("/api/v2/cmdb/system/ha", capability=capability))
                 payload = forti_ha(raw)
+            elif capability == "utm":
+                dns_raw = self._get(
+                    "/api/v2/cmdb/dnsfilter/profile",
+                    capability=capability,
+                    optional=True,
+                )
+                web_raw = self._get(
+                    "/api/v2/cmdb/webfilter/profile",
+                    capability=capability,
+                    optional=True,
+                )
+                app_raw = self._get(
+                    "/api/v2/cmdb/application/list",
+                    capability=capability,
+                    optional=True,
+                )
+                stitch_raw = self._get(
+                    "/api/v2/cmdb/system/automation-stitch",
+                    capability=capability,
+                    optional=True,
+                )
+                raw = {}
+                if dns_raw is not None:
+                    raw["/api/v2/cmdb/dnsfilter/profile"] = dns_raw
+                if web_raw is not None:
+                    raw["/api/v2/cmdb/webfilter/profile"] = web_raw
+                if app_raw is not None:
+                    raw["/api/v2/cmdb/application/list"] = app_raw
+                if stitch_raw is not None:
+                    raw["/api/v2/cmdb/system/automation-stitch"] = stitch_raw
+                payload = forti_utm(dns_raw, web_raw, app_raw, stitch_raw)
             elif capability == "system_info":
                 raw = self._get("/api/v2/monitor/system/status", capability=capability)
                 payload = forti_system(raw)
@@ -813,5 +964,6 @@ __all__ = [
     "forti_system",
     "forti_unwrap",
     "forti_users",
+    "forti_utm",
     "forti_zones",
 ]

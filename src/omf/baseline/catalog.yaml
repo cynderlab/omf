@@ -376,6 +376,101 @@ checks:
     mitigation:
       generic: "Enable HA reserved management interfaces when HA is enabled."
       fortinet: "In config system ha, set ha-mgmt-status enable and configure ha-mgmt-interfaces."
+  - id: FW-UTM-001
+    title: IPS sensor is set on accept policies
+    severity: high
+    applies_to: [fortinet]
+    needs: [firewall_filter]
+    evaluator: utm_on_accept
+    params:
+      default:
+        field: ips_sensor
+    mitigation:
+      generic: "Attach an IPS sensor to every enabled accept policy."
+      fortinet: "On every accept firewall policy, set ips-sensor to an IPS sensor."
+  - id: FW-UTM-002
+    title: DNS filter logs all queries
+    severity: medium
+    applies_to: [fortinet]
+    needs: [utm]
+    evaluator: utm_profile_log_all
+    params:
+      default:
+        kind: dnsfilter
+    mitigation:
+      generic: "Enable full query logging on at least one DNS filter profile."
+      fortinet: "In a DNS filter profile, set log-all-domain enable."
+  - id: FW-UTM-003
+    title: DNS filter is set on accept policies
+    severity: high
+    applies_to: [fortinet]
+    needs: [firewall_filter]
+    evaluator: utm_on_accept
+    params:
+      default:
+        field: dnsfilter_profile
+    mitigation:
+      generic: "Attach a DNS filter profile to every enabled accept policy."
+      fortinet: "On every accept firewall policy, set dnsfilter-profile to a DNS filter profile."
+  - id: FW-UTM-004
+    title: Web filter blocks malicious, phishing, and spam
+    severity: high
+    applies_to: [fortinet]
+    needs: [utm]
+    evaluator: utm_profile_blocks
+    params:
+      default:
+        kind: webfilter
+    mitigation:
+      generic: "Block malicious, phishing, and spam web categories in at least one web filter profile."
+      fortinet: "In a web filter profile FortiGuard category filter, set Malicious Websites, Phishing, and Spam to Block."
+  - id: FW-UTM-005
+    title: Application control blocks P2P and proxy
+    severity: high
+    applies_to: [fortinet]
+    needs: [utm]
+    evaluator: utm_profile_blocks
+    params:
+      default:
+        kind: appctrl
+    mitigation:
+      generic: "Block P2P and proxy application categories in at least one application control profile."
+      fortinet: "In an application control profile, set the P2P and Proxy categories to Block."
+  - id: FW-UTM-006
+    title: Application control has no allow categories
+    severity: high
+    applies_to: [fortinet]
+    needs: [utm]
+    evaluator: utm_profile_no_allow
+    params:
+      default:
+        kind: appctrl
+    mitigation:
+      generic: "Do not set application-control categories to Allow; use monitor or block."
+      fortinet: "In each application control profile, do not set any category action to Allow."
+  - id: FW-UTM-007
+    title: Application control is set on accept policies
+    severity: high
+    applies_to: [fortinet]
+    needs: [firewall_filter]
+    evaluator: utm_on_accept
+    params:
+      default:
+        field: application_list
+    mitigation:
+      generic: "Attach an application control profile to every enabled accept policy."
+      fortinet: "On every accept firewall policy, set application-list to an application control profile."
+  - id: FW-FAB-001
+    title: Compromised Host Quarantine stitch is enabled
+    severity: high
+    applies_to: [fortinet]
+    needs: [utm]
+    evaluator: stitch_enabled
+    params:
+      default: {}
+    mitigation:
+      generic: "Enable the Compromised Host Quarantine automation stitch."
+      fortinet: "In config system automation-stitch, enable Compromised Host Quarantine."
   - id: FW-SYS-001
     title: Firmware version is recorded
     severity: info

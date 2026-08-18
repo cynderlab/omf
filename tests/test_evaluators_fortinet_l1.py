@@ -20,8 +20,16 @@ from omf.baseline.evaluators.policy import (
 )
 from omf.baseline.evaluators.services import wan_mgmt_disabled
 from omf.baseline.evaluators.snmp import snmp_memory_traps, snmp_not_legacy
+from omf.baseline.evaluators.utm import (
+    stitch_enabled,
+    utm_on_accept,
+    utm_profile_blocks,
+    utm_profile_log_all,
+    utm_profile_no_allow,
+)
 from omf.schema.capabilities import (
     AdminSettings,
+    AutomationStitch,
     HaConfig,
     LocalInPolicy,
     LocalInPolicyList,
@@ -32,6 +40,8 @@ from omf.schema.capabilities import (
     ServiceList,
     SnmpConfig,
     SnmpUser,
+    UtmConfig,
+    UtmProfile,
     Zone,
     ZoneList,
 )
@@ -355,4 +365,123 @@ def test_ha_checks_standalone_and_active():
     )
     assert ha_monitors_set({"ha": ok}, {}, "fortinet").status == "pass"
     assert ha_reserved_mgmt({"ha": ok}, {}, "fortinet").status == "pass"
+
+
+def _policy(field, value):
+    kwargs = {
+        "id": "1",
+        "enabled": True,
+        "action": "accept",
+        "src": ("lan",),
+        "dst": ("wan",),
+        "service": ("HTTPS",),
+        field: value,
+    }
+    return ev("firewall_filter", PolicyList(policies=(Policy(**kwargs),)))
+
+
+def test_utm_on_accept_ips_dns_app():
+    missing = ev(
+        "firewall_filter",
+        PolicyList(
+            policies=(
+                Policy(
+                    id="1",
+                    enabled=True,
+                    action="accept",
+                    src=("lan",),
+                    dst=("wan",),
+                    service=("HTTPS",),
+                ),
+            )
+        ),
+    )
+    assert utm_on_accept({"firewall_filter": missing}, {"field": "ips_sensor"}, "fortinet").status == "fail"
+    assert utm_on_accept({"firewall_filter": missing}, {"field": "dnsfilter_profile"}, "fortinet").status == "fail"
+    assert utm_on_accept({"firewall_filter": missing}, {"field": "application_list"}, "fortinet").status == "fail"
+    assert utm_on_accept({"firewall_filter": _policy("ips_sensor", "default")}, {"field": "ips_sensor"}, "fortinet").status == "pass"
+    assert utm_on_accept({"firewall_filter": _policy("dnsfilter_profile", "default")}, {"field": "dnsfilter_profile"}, "fortinet").status == "pass"
+    assert utm_on_accept({"firewall_filter": _policy("application_list", "default")}, {"field": "application_list"}, "fortinet").status == "pass"
+
+
+def test_utm_profile_log_all():
+    off = ev("utm", UtmConfig(profiles=(UtmProfile(name="default", kind="dnsfilter", log_all=False),)))
+    assert utm_profile_log_all({"utm": off}, {}, "fortinet").status == "fail"
+    on = ev("utm", UtmConfig(profiles=(UtmProfile(name="default", kind="dnsfilter", log_all=True),)))
+    assert utm_profile_log_all({"utm": on}, {}, "fortinet").status == "pass"
+
+
+def test_utm_profile_blocks_web_and_app():
+    web_partial = ev(
+        "utm",
+        UtmConfig(profiles=(UtmProfile(name="default", kind="webfilter", blocked_categories=("malicious",)),)),
+    )
+    assert utm_profile_blocks(
+        {"utm": web_partial},
+        {"kind": "webfilter", "webfilter_block": ["malicious", "phishing", "spam"]},
+        "fortinet",
+    ).status == "fail"
+    web_ok = ev(
+        "utm",
+        UtmConfig(
+            profiles=(
+                UtmProfile(
+                    name="default",
+                    kind="webfilter",
+                    blocked_categories=("malicious", "phishing", "spam", "dynamic-dns"),
+                ),
+            )
+        ),
+    )
+    assert utm_profile_blocks(
+        {"utm": web_ok},
+        {"kind": "webfilter", "webfilter_block": ["malicious", "phishing", "spam"]},
+        "fortinet",
+    ).status == "pass"
+    app_partial = ev(
+        "utm",
+        UtmConfig(profiles=(UtmProfile(name="default", kind="appctrl", blocked_categories=("p2p",)),)),
+    )
+    assert utm_profile_blocks(
+        {"utm": app_partial},
+        {"kind": "appctrl", "appctrl_block": ["p2p", "proxy"]},
+        "fortinet",
+    ).status == "fail"
+    app_ok = ev(
+        "utm",
+        UtmConfig(profiles=(UtmProfile(name="default", kind="appctrl", blocked_categories=("p2p", "proxy")),)),
+    )
+    assert utm_profile_blocks(
+        {"utm": app_ok},
+        {"kind": "appctrl", "appctrl_block": ["p2p", "proxy"]},
+        "fortinet",
+    ).status == "pass"
+
+
+def test_utm_profile_no_allow():
+    allowed = ev(
+        "utm",
+        UtmConfig(profiles=(UtmProfile(name="default", kind="appctrl", allowed_categories=("proxy",)),)),
+    )
+    assert utm_profile_no_allow({"utm": allowed}, {}, "fortinet").status == "fail"
+    blocked_only = ev(
+        "utm",
+        UtmConfig(profiles=(UtmProfile(name="default", kind="appctrl", blocked_categories=("p2p", "proxy")),)),
+    )
+    assert utm_profile_no_allow({"utm": blocked_only}, {}, "fortinet").status == "pass"
+
+
+def test_stitch_enabled():
+    off = ev(
+        "utm",
+        UtmConfig(stitches=(AutomationStitch(name="Compromised Host Quarantine", enabled=False),)),
+    )
+    assert stitch_enabled({"utm": off}, {}, "fortinet").status == "fail"
+    missing = ev("utm", UtmConfig())
+    assert stitch_enabled({"utm": missing}, {}, "fortinet").status == "fail"
+    on = ev(
+        "utm",
+        UtmConfig(stitches=(AutomationStitch(name="compromised host quarantine", enabled=True),)),
+    )
+    assert stitch_enabled({"utm": on}, {}, "fortinet").status == "pass"
 

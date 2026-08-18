@@ -15,7 +15,8 @@ def test_pol002_only_mikrotik():
     assert "FW-POL-002" in mt
     assert "FW-POL-002" not in ft
     assert len(mt) == 14
-    assert len(ft) == 33
+    assert len(ft) == 41
+    assert {"FW-UTM-001", "FW-UTM-007", "FW-FAB-001"} <= ft
 
 
 def test_resolve_admin_mode_differs_by_vendor():

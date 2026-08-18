@@ -1,0 +1,13 @@
+{
+  "results": [
+    {
+      "name": "default",
+      "ftgd-wf": {
+        "filters": [
+          {"category": 26, "action": "block"},
+          {"category": 61, "action": "monitor"}
+        ]
+      }
+    }
+  ]
+}

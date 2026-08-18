@@ -38,6 +38,13 @@ from omf.baseline.evaluators.services import (
 )
 from omf.baseline.evaluators.snmp import no_default_snmp_community, snmp_memory_traps, snmp_not_legacy
 from omf.baseline.evaluators.system import firmware_present
+from omf.baseline.evaluators.utm import (
+    stitch_enabled,
+    utm_on_accept,
+    utm_profile_blocks,
+    utm_profile_log_all,
+    utm_profile_no_allow,
+)
 from omf.baseline.loader import CheckDef, resolve_params
 from omf.schema.evidence import CheckResult, Evidence
 
@@ -77,6 +84,11 @@ REGISTRY: dict[str, Evaluator] = {
     "virtual_patch_on_accept": virtual_patch_on_accept,
     "ha_monitors_set": ha_monitors_set,
     "ha_reserved_mgmt": ha_reserved_mgmt,
+    "utm_on_accept": utm_on_accept,
+    "utm_profile_log_all": utm_profile_log_all,
+    "utm_profile_blocks": utm_profile_blocks,
+    "utm_profile_no_allow": utm_profile_no_allow,
+    "stitch_enabled": stitch_enabled,
 }
 
 

@@ -17,6 +17,8 @@ _PROFILE_KEYS = (
     "wan_mgmt",
     "isdb_inbound",
     "isdb_outbound",
+    "webfilter_block",
+    "appctrl_block",
 )
 
 

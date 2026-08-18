@@ -178,3 +178,49 @@ def test_ha_standalone_defaults():
     assert ha.ha_mgmt_interfaces == ()
 
 
+def test_utm_normalize():
+    from omf.adapters.fortinet import forti_utm
+    utm = forti_utm(load("dnsfilter.json"), load("webfilter.json"), load("application_list.json"), load("automation_stitch.json"))
+    dns = next(p for p in utm.profiles if p.kind == "dnsfilter")
+    assert dns.log_all is False
+    web = next(p for p in utm.profiles if p.kind == "webfilter")
+    assert "malicious" in web.blocked_categories
+    app = next(p for p in utm.profiles if p.kind == "appctrl")
+    assert "proxy" in app.allowed_categories
+    assert utm.stitches[0].enabled is False
+
+
+def test_utm_normalize_string_names_and_envelope():
+    from omf.adapters.fortinet import forti_utm
+    utm = forti_utm(
+        {"results": [{"name": "logall", "log-all": "enable"}]},
+        {
+            "results": [
+                {
+                    "name": "wf",
+                    "ftgd-wf": {
+                        "filters": {"": [{"category": "Malicious Websites", "action": "deny"}]},
+                    },
+                }
+            ]
+        },
+        {
+            "results": [
+                {
+                    "name": "app",
+                    "entries": {"": [{"category": "P2P", "action": "block"}, {"category": "Proxy", "action": "pass"}]},
+                }
+            ]
+        },
+        {"results": [{"name": "Compromised Host Quarantine", "status": "enable"}]},
+    )
+    dns = next(p for p in utm.profiles if p.kind == "dnsfilter")
+    assert dns.log_all is True
+    web = next(p for p in utm.profiles if p.kind == "webfilter")
+    assert "malicious" in web.blocked_categories
+    app = next(p for p in utm.profiles if p.kind == "appctrl")
+    assert "p2p" in app.blocked_categories
+    assert "proxy" in app.allowed_categories
+    assert utm.stitches[0].enabled is True
+
+
