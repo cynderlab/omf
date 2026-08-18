@@ -1,0 +1,51 @@
+#!/usr/bin/env sh
+set -eu
+ROOT="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+HELP='OH MY FIREWALL
+
+Usage:
+  ./omf              Start the audit TUI (requires ./omf install)
+  ./omf install      Sync all project dependencies with uv
+  ./omf doctor       Check what is missing (no firewall connection)
+  ./omf help         Show this help
+'
+
+case "${1:-}" in
+  help|-h|--help)
+    printf '%s' "$HELP"
+    exit 0
+    ;;
+  install)
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "uv is not on PATH. Install it:" >&2
+      echo "  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+      exit 1
+    fi
+    exec uv sync --all-extras --all-groups
+    ;;
+  doctor)
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "MISSING  uv"
+      echo "run: curl -LsSf https://astral.sh/uv/install.sh | sh"
+      exit 1
+    fi
+    exec uv run python -m omf doctor
+    ;;
+  "")
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "uv is not on PATH. Run ./omf doctor" >&2
+      exit 1
+    fi
+    if ! uv run python -c "import omf" >/dev/null 2>&1; then
+      echo "Dependencies are not synced. Run ./omf install" >&2
+      exit 1
+    fi
+    exec uv run python -m omf
+    ;;
+  *)
+    printf '%s' "$HELP"
+    exit 1
+    ;;
+esac
