@@ -9,7 +9,7 @@
 
 # OH MY FIREWALL
 
-**Read-only multi-vendor firewall audit for a consultant auditor.**
+**Beta.** Read-only multi-vendor firewall audit for a consultant auditor.
 
 Connect once. Collect evidence. Evaluate a fixed baseline. Write Markdown under `./audits/`.
 
@@ -17,7 +17,7 @@ The brand is transparency: you see every step. The model never sees secrets or i
 
 | | |
 |---|---|
-| **Version** | 0.1.0 |
+| **Version** | 0.1.0 **beta** |
 | **Author** | [Pere Casas](mailto:pcasas@cynderlab.com) · [Cynderlab](https://cynderlab.com) |
 | **Contact** | pcasas@cynderlab.com |
 | **License** | [PolyForm Noncommercial 1.0.0](LICENSE) — free to use, no commercial benefit, credit the original |
@@ -25,14 +25,22 @@ The brand is transparency: you see every step. The model never sees secrets or i
 
 ## What it does
 
-OMF is a **read-only** REST auditor for:
-
-- **MikroTik** RouterOS 7+ (`/rest/...`, HTTP Basic)
-- **Fortinet** FortiOS (`/api/v2/...`, token or session login)
-
-It does **not** SSH, does not change device config, and does not pick checks with an LLM. The runner plans from a YAML catalog, collects each capability once, evaluates pure functions, then (optionally) asks a model to write the narrative from **redacted** findings only.
+OMF is a **read-only** REST auditor. It does **not** SSH, does not change device config, and does not pick checks with an LLM. The runner plans from a YAML catalog, collects each capability once, evaluates pure functions, then (optionally) asks a model to write the narrative from **redacted** findings only.
 
 If the LLM is missing or fails, you still get collect + evaluate + a deterministic skeleton report.
+
+This is **beta** software. Treat findings as a starting point for the auditor, not a finished certification.
+
+## Supported vendors
+
+| Vendor | Status | Access |
+|---|---|---|
+| MikroTik RouterOS 7+ | Supported | REST (`/rest/...`, HTTP Basic) |
+| Fortinet FortiOS | Partial | REST (`/api/v2/...`, token or session login) |
+| pfSense | Coming soon | |
+| SonicWall | Coming soon | |
+
+**Supported** means the catalog has been exercised against a live device. **Partial** means the adapter and checks exist but are not at the same confidence. **Coming soon** is not in this release.
 
 ## Getting started
 
@@ -119,9 +127,9 @@ Review the folder before you share it. Mitigations in the report are **examples*
 
 ## Scope
 
-In: MikroTik RouterOS 7+ REST, Fortinet FortiOS REST, Markdown reports, English TUI.
+In: REST collection, Markdown reports, English TUI.
 
-Out: SSH, RouterOS 6, other vendors, PDF/HTML/DOCX, mutating the firewall.
+Out: SSH, RouterOS 6, PDF/HTML/DOCX, mutating the firewall. Vendors not marked **Supported** or **Partial** above are not collected.
 
 ## License
 
