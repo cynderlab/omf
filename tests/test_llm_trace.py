@@ -114,3 +114,6 @@ def test_run_analysis_debug_dumps_what_we_ask(monkeypatch, capsys):
     assert "Write the firewall audit report using only the tools." in err
     assert "list_findings" in err
     assert "sk-live-secret-key" not in err
+    assert "Write the firewall audit report using only the tools." in ctx.transcript
+    assert "fail findings only" in ctx.transcript
+    assert "sk-live-secret-key" not in ctx.transcript

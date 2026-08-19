@@ -66,6 +66,44 @@ def test_pipeline_skeleton_report_and_no_secrets_on_disk(tmp_path: Path):
     assert '"fail"' in findings
     assert (store.path / "redacted" / "findings.json").is_file()
     assert (store.path / "token_map.json").is_file()
+    assert not (store.path / "redacted" / "transcript.md").is_file()
+
+
+def test_pipeline_writes_llm_transcript(tmp_path: Path, monkeypatch):
+    def fake_run(ctx, settings, on_event=None):
+        ctx.transcript = (
+            "--- LLM transcript (what the model saw; already redacted) ---\n"
+            "Write the firewall audit report using only the tools.\n"
+        )
+        ctx.submitted.append("## Resum executiu\n")
+        return ctx.submitted[-1]
+
+    monkeypatch.setattr("omf.pipeline.run_analysis", fake_run)
+    session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "tokentok", True, "ca")
+    store = AuditStore(tmp_path, "mikrotik", datetime.now(timezone.utc))
+    llm = LlmSettings("http://llm.example", "sk-live-secret-key", "model", "openai")
+    run_audit(session, store, FullFake(), llm, lambda event: None)
+    path = store.path / "redacted" / "transcript.md"
+    text = path.read_text()
+    assert "Write the firewall audit report using only the tools." in text
+    assert "https://192.0.2.8" not in text
+    assert "s3cret" not in text
+    assert "tokentok" not in text
+    assert "sk-live-secret-key" not in text
+
+
+def test_pipeline_keeps_transcript_on_llm_fallback(tmp_path: Path, monkeypatch):
+    def fake_run(ctx, settings, on_event=None):
+        ctx.transcript = "--- LLM transcript ---\nUserPromptPart ask\n"
+        raise RuntimeError("model down")
+
+    monkeypatch.setattr("omf.pipeline.run_analysis", fake_run)
+    session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "", True, "ca")
+    store = AuditStore(tmp_path, "mikrotik", datetime.now(timezone.utc))
+    llm = LlmSettings("http://llm.example", "sk-test", "model", "openai")
+    report = run_audit(session, store, FullFake(), llm, lambda event: None)
+    assert "Narrative skipped" in report.read_text()
+    assert "UserPromptPart ask" in (store.path / "redacted" / "transcript.md").read_text()
 
 
 def test_safe_exc_detail_strips_api_key():

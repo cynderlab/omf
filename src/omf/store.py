@@ -61,6 +61,9 @@ class AuditStore:
     def write_report_redacted(self, markdown: str) -> None:
         self._write_text("report.redacted.md", markdown)
 
+    def write_llm_transcript(self, text: str) -> None:
+        self._write_text(Path("redacted") / "transcript.md", text)
+
     def assert_no_secrets(self, forbidden: list[str]) -> None:
         if not self.path.is_dir():
             return

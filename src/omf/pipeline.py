@@ -147,10 +147,12 @@ def _analysis_body(
             on_event=lambda event: _emit(store, on_event, event),
         )
         store.write_report_redacted(body)
+        _write_transcript(store, ctx)
         _emit(store, on_event, {"phase": "llm", "status": "done", "model": model})
         return body
     except (LlmNotConfigured, Exception) as exc:
         _log.warning("llm fallback: %s", exc)
+        _write_transcript(store, ctx)
         _emit(store, on_event, {
             "phase": "llm",
             "status": "fallback",
@@ -160,6 +162,11 @@ def _analysis_body(
         return skeleton_body(
             findings, checks, session.vendor, language=session.report_language
         )
+
+
+def _write_transcript(store: AuditStore, ctx: AnalysisContext) -> None:
+    if ctx.transcript:
+        store.write_llm_transcript(ctx.transcript)
 
 
 def _safe_exc_detail(exc: BaseException, secret: str | None) -> str:

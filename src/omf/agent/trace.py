@@ -84,7 +84,9 @@ def instrumentation_settings(on_event: Callable[[dict], None]) -> Instrumentatio
     )
 
 
-def format_transcript(messages: list, *, secret: str | None = None) -> str:
+def format_transcript(
+    messages: list, *, secret: str | None = None, max_part: int | None = _MAX_PART
+) -> str:
     lines = ["--- LLM transcript (what the model saw; already redacted) ---"]
     for message in messages:
         parts = getattr(message, "parts", None) or ()
@@ -92,28 +94,28 @@ def format_transcript(messages: list, *, secret: str | None = None) -> str:
             lines.append(type(message).__name__)
             continue
         for part in parts:
-            lines.append(_format_part(part))
+            lines.append(_format_part(part, max_part=max_part))
     return debug_strip("\n".join(lines), secret)
 
 
-def _format_part(part: Any) -> str:
+def _format_part(part: Any, *, max_part: int | None) -> str:
     label = type(part).__name__
     tool = getattr(part, "tool_name", None)
     args = getattr(part, "args", None)
     content = getattr(part, "content", None)
     if tool and args is not None:
-        return f"{label} {tool} {_clip(args)}"
+        return f"{label} {tool} {_clip(args, max_part)}"
     if tool is not None and content is not None:
-        return f"{label} {tool} {_clip(content)}"
+        return f"{label} {tool} {_clip(content, max_part)}"
     if content is not None:
-        return f"{label} {_clip(content)}"
+        return f"{label} {_clip(content, max_part)}"
     if tool:
         return f"{label} {tool}"
     return label
 
 
-def _clip(value: object) -> str:
+def _clip(value: object, max_part: int | None) -> str:
     text = value if isinstance(value, str) else repr(value)
-    if len(text) > _MAX_PART:
-        return text[:_MAX_PART] + "…[truncated]"
+    if max_part is not None and len(text) > max_part:
+        return text[:max_part] + "…[truncated]"
     return text

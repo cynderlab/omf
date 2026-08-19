@@ -18,6 +18,7 @@ class AnalysisContext:
     vendor: str
     language: str
     submitted: list[str]
+    transcript: str = ""
 
 
 def list_findings(ctx: AnalysisContext) -> list[dict]:

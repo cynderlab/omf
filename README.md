@@ -123,7 +123,7 @@ Each run writes `./audits/YYYY-MM-DDTHHMMSS-{vendor}/` (gitignored):
 | `findings.json` | Pass / fail / error / skipped + diagnostics |
 | `evidence/` | Normalized payloads |
 | `raw/` | Vendor JSON — **local only, unredacted** |
-| `redacted/` | What the model is allowed to read |
+| `redacted/` | What the model is allowed to read (`transcript.md` = prompts + tools; omitted if LLM skipped) |
 | `token_map.json` | Local destokenize map — **never sent to the model** |
 | `events.jsonl` | Paths and phases, no host, no secrets |
 | `meta.json` | Session meta — no URL, no credentials |

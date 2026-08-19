@@ -39,5 +39,7 @@ def test_writes_raw_evidence_findings(tmp_path: Path):
     assert (store.path / "findings.json").is_file()
     assert (store.path / "events.jsonl").is_file()
     assert (store.path / "report.md").read_text() == "# hi\n"
+    store.write_llm_transcript("system + user prompt\n")
+    assert (store.path / "redacted" / "transcript.md").read_text() == "system + user prompt\n"
     with pytest.raises(ValueError):
         store.append_event({"password": "x"})

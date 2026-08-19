@@ -122,15 +122,26 @@ def run_analysis(
         try:
             with capture_run_messages() as messages:
                 _invoke_run(agent)
-            _dump_transcript(messages, settings.api_key)
+            _keep_transcript(ctx, messages, settings.api_key)
             if ctx.submitted:
                 return ctx.submitted[-1]
             last_exc = RuntimeError("agent did not call submit_report")
         except Exception as exc:
-            _dump_transcript(messages, settings.api_key)
+            _keep_transcript(ctx, messages, settings.api_key)
             last_exc = exc
     assert last_exc is not None
     raise last_exc
+
+
+def _keep_transcript(ctx: AnalysisContext, messages: list, secret: str | None) -> None:
+    if not messages:
+        return
+    text = format_transcript(messages, secret=secret, max_part=None)
+    system = _prompt_for(ctx.language)
+    if system not in text:
+        text = f"SystemPromptPart {system}\n{text}"
+    ctx.transcript = text
+    _dump_transcript(messages, secret)
 
 
 def _dump_transcript(messages: list, secret: str | None) -> None:

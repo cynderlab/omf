@@ -93,6 +93,7 @@ evidence/<capability>.json
 findings.json
 redacted/findings.json
 redacted/evidence/<capability>.json
+redacted/transcript.md       # what the model saw; omitted if LLM skipped
 token_map.json               # local only
 events.jsonl                # path only, no host, no secrets
 report.redacted.md           # omitted if LLM skipped
