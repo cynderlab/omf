@@ -1,1 +1,1 @@
-[{"name": "public", "security": "none"}]
+[{"name": "public", "security": "none", "read-access": "true"}]

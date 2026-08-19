@@ -12,7 +12,7 @@ Usage:
   ./omf help         Show this help
 
 Flags (TUI / doctor):
-  -v, --debug      DEBUG on stderr (HTTP URLs, no secrets)
+  -v, --debug      DEBUG on stderr (HTTP URLs, LLM transcript; no secrets)
 '
 
 case "${1:-}" in

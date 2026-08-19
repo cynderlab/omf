@@ -16,7 +16,7 @@ These are product constraints, not style nits. A change that violates any of the
 4. **Adapters are read-only.** GET (and FortiOS session login if no token). No POST/PUT/PATCH/DELETE that mutates device config. Login/logout cookies are not a config change.
 5. **Evaluators are pure.** They take `(evidence_map, params, vendor) -> CheckResult`. They do not import HTTP, adapters, env, or secrets. They do not decide what to collect.
 6. **The model does not choose checks.** The runner plans from the catalog, collects each needed capability **once**, then evaluates. LLM writes narrative only.
-7. **TLS verify is on** unless the wizard explicitly says no (default no to insecure).
+7. **TLS verify is off.** The TUI does not ask. Management certs are typically self-signed. Show a dim notice. `Session.verify_tls` stays so adapters/tests can still set it.
 8. **Mitigations are examples.** Catalog text is the source. The LLM may rephrase and bind it to redacted evidence; it must not invent CLI/API beyond that text. The auditor owns any change.
 9. **English is the product language.** Source, comments, docstrings, commit messages, catalog titles/mitigations, evaluator diagnostics, TUI, `doctor`, `help`, README, and this file are English. The only exception is what the operator (or an explicit product rule) selects: the **report body** language `ca` | `es` | `en`. Do not add Catalan, Spanish, or any other language to the app unless the user asks for that specific surface.
 
@@ -109,7 +109,7 @@ Log lines: `[collect] GET /rest/user 200 84ms` — method, **path only**, status
 
 Pydantic v2, `ConfigDict(frozen=True, extra="forbid")`. No extras dict on capability payloads. Vendor leftovers stay in `raw/` and never enter evaluators.
 
-Nine CORE capabilities (stable names): `users`, `admin_settings`, `services`, `ntp`, `dns`, `logging`, `snmp`, `firewall_filter`, `system_info`. Four Fortinet-only extras: `zones`, `local_in`, `ha`, `utm`. `CORE_CAPABILITIES` is the original nine. `ALL_CAPABILITIES` is CORE plus the extras. Fortinet `implemented()` returns ALL. MikroTik returns CORE so extra-dependent checks are SKIPPED.
+Nine CORE capabilities (stable names): `users`, `admin_settings`, `services`, `ntp`, `dns`, `logging`, `snmp`, `firewall_filter`, `system_info`. Four Fortinet-only extras: `zones`, `local_in`, `ha`, `utm`. One MikroTik-only extra: `l2_access`. `CORE_CAPABILITIES` is the original nine. `ALL_CAPABILITIES` is CORE plus both extra sets. Fortinet `implemented()` returns CORE plus Fortinet extras. MikroTik returns CORE plus `l2_access`. Unimplemented extras make dependents SKIPPED.
 
 `collect(capability)` **always** returns the same frozen payload type for every vendor. If the adapter cannot fill that type, the capability is ERROR — not a slightly different JSON. Policy “any” tokens (`*`, empty, `0.0.0.0/0`, `::/0`) normalize to the single token `any` via `adapters/normalize.py`.
 
@@ -117,13 +117,13 @@ Vendor-specific **policy** (default account names, insecure service lists, defau
 
 If two vendors do not share a judgement, use evaluator `params.mode` or two checks with different `applies_to`. Do not `if vendor` inside an adapter to decide a finding. Adapter `if vendor` is only for HTTP/normalize.
 
-Forty-two checks today (14 MikroTik, 41 Fortinet). `FW-POL-002` is MikroTik-only. IDs are ours, not CIS. Inspired by CIS FortiGate 7.4.x Benchmark v1.0.1 Level 1. Level 2 is out of scope. CIS 2.4.3 is omitted because “correct profile” is org policy. Growing the catalog is additive YAML + evaluator. There is no firmware EOL database; do not invent a minimum-version floor.
+Forty-eight checks today (24 MikroTik, 41 Fortinet). `FW-POL-002` is MikroTik-only. `FW-POL-005` is Fortinet-only. MikroTik extras include neighbor discovery, MAC access, auxiliary services, SSH strong-crypto, PPTP server, and last RouterOS update status from `GET /rest/system/package/update` (never POST `check-for-updates`). IDs are ours, not CIS. Inspired by CIS FortiGate 7.4.x Benchmark v1.0.1 Level 1. Level 2 is out of scope. CIS 2.4.3 is omitted because “correct profile” is org policy. Growing the catalog is additive YAML + evaluator. There is no firmware EOL database; do not invent a minimum-version floor.
 
 ## How to extend
 
 **Add a check** (preferred, cheapest):
 
-1. Entry in `src/omf/baseline/catalog.yaml` (`id`, `title`, `severity`, `applies_to`, `needs`, `evaluator`, `params`, `mitigation.generic` + optional vendor text).
+1. Entry in `src/omf/baseline/catalog.yaml` (`id`, `title`, `severity`, `applies_to`, `needs`, `evaluator`, `params`, `mitigation.generic` + optional vendor text). `title` is a neutral topic (`Administrative HTTP/HTTPS ports`), never a pass/fail assertion. Status and `diagnostic` carry the judgement.
 2. If the evaluator is new: pure function in `baseline/evaluators/`, register in `REGISTRY`.
 3. Vendor params or `profiles/<vendor>.yaml` — not adapter branches.
 4. Unit test with frozen fixtures. No network.

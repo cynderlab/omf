@@ -16,7 +16,12 @@ def no_default_snmp_community(
     payload: SnmpConfig = evidence["snmp"].payload
     forbidden = {n.lower() for n in params.get("forbidden", ("public", "private"))}
     hits = (
-        [c.name for c in payload.communities if c.name.lower() in forbidden]
+        [
+            c.name
+            for c in payload.communities
+            if c.name.lower() in forbidden
+            and (not params.get("require_read_access") or c.read_access is True)
+        ]
         if payload.enabled
         else []
     )
@@ -38,8 +43,17 @@ def snmp_not_legacy(
     vendor: str,
 ) -> CheckResult:
     payload: SnmpConfig = evidence["snmp"].payload
+    legacy_versions = {str(v).lower() for v in params.get("legacy_versions", ())}
     hits = (
-        [c.name for c in payload.communities if str(c.version).lower() not in _V3]
+        [
+            c.name
+            for c in payload.communities
+            if (
+                str(c.version).lower() in legacy_versions
+                if legacy_versions
+                else str(c.version).lower() not in _V3
+            )
+        ]
         if payload.enabled
         else []
     )

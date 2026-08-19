@@ -11,7 +11,12 @@ from omf.baseline.evaluators.services import insecure_services_disabled, service
 from omf.baseline.evaluators.ntp_dns import ntp_configured, dns_configured
 from omf.baseline.evaluators.logging import local_logging_enabled, remote_syslog_configured
 from omf.baseline.evaluators.snmp import no_default_snmp_community, snmp_not_legacy
-from omf.baseline.evaluators.policy import no_any_any_accept, explicit_deny_present
+from omf.baseline.evaluators.policy import (
+    no_any_any_accept,
+    explicit_deny_present,
+    no_unrestricted_service,
+    policies_logged,
+)
 from omf.baseline.evaluators.system import firmware_present
 from omf.baseline.evaluators import REGISTRY, evaluate
 from omf.baseline.loader import load_catalog, resolve_params
@@ -112,6 +117,14 @@ def test_policies():
         Policy(id="9", enabled=True, action="drop", src=("any",), dst=("any",), service=("any",)),
     )))
     assert explicit_deny_present({"firewall_filter": deny}, {}, "mikrotik").status == "pass"
+    assert no_unrestricted_service({"firewall_filter": deny}, {"actions": ["accept"]}, "mikrotik").status == "pass"
+    assert no_unrestricted_service({"firewall_filter": deny}, {}, "fortinet").status == "fail"
+    logged = ev("firewall_filter", PolicyList(policies=(
+        Policy(id="1", enabled=True, action="accept", src=("lan",), dst=("wan",), service=("tcp/443",), log=True),
+    )))
+    logging = ev("logging", LoggingConfig(local_enabled=True, remote_targets=(), implicit_policy_logged=None))
+    assert policies_logged({"firewall_filter": logged, "logging": logging}, {"require_implicit": False}, "mikrotik").status == "pass"
+    assert policies_logged({"firewall_filter": logged, "logging": logging}, {}, "fortinet").status == "fail"
 
 
 def test_firmware():

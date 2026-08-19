@@ -6,7 +6,7 @@ from omf.adapters.mikrotik import MikrotikAdapter
 from omf.adapters.fortinet import FortinetAdapter
 from omf.adapters.base import ProbeError, CollectError
 from omf.adapters.factory import build_adapter
-from omf.schema.capabilities import ALL_CAPABILITIES, CORE_CAPABILITIES
+from omf.schema.capabilities import CORE_CAPABILITIES, FORTINET_EXTRAS, MIKROTIK_EXTRAS
 
 MT = Path(__file__).parent / "fixtures" / "mikrotik"
 FT = Path(__file__).parent / "fixtures" / "fortinet"
@@ -166,8 +166,10 @@ def test_mikrotik_collect_all_capabilities():
         "/rest/user": "user.json",
         "/rest/system/identity": "system_identity.json",
         "/rest/user/settings": "user_settings.json",
+        "/rest/system/clock": "system_clock.json",
         "/rest/ip/service": "ip_service.json",
         "/rest/system/ntp/client": "ntp_client.json",
+        "/rest/system/ntp/client/servers": "ntp_client_servers.json",
         "/rest/ip/dns": "ip_dns.json",
         "/rest/system/logging": "system_logging.json",
         "/rest/system/logging/action": "system_logging_action.json",
@@ -175,6 +177,19 @@ def test_mikrotik_collect_all_capabilities():
         "/rest/snmp/community": "snmp_community.json",
         "/rest/ip/firewall/filter": "ip_firewall_filter.json",
         "/rest/system/resource": "system_resource.json",
+        "/rest/system/routerboard": "system_routerboard.json",
+        "/rest/system/package/update": "package_update.json",
+        "/rest/ip/neighbor/discovery-settings": "neighbor_discovery.json",
+        "/rest/tool/mac-server": "mac_server.json",
+        "/rest/tool/mac-server/mac-winbox": "mac_winbox.json",
+        "/rest/tool/mac-server/ping": "mac_ping.json",
+        "/rest/ip/ssh": "ip_ssh.json",
+        "/rest/tool/bandwidth-server": "bandwidth_server.json",
+        "/rest/ip/proxy": "ip_proxy.json",
+        "/rest/ip/socks": "ip_socks.json",
+        "/rest/ip/upnp": "ip_upnp.json",
+        "/rest/ip/cloud": "ip_cloud.json",
+        "/rest/interface/pptp-server/server": "pptp_server.json",
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -192,10 +207,15 @@ def test_mikrotik_collect_all_capabilities():
     admin, _ = ad.collect("admin_settings")
     assert admin.payload.hostname == "MikroTik"
     assert admin.payload.idle_timeout_seconds == 600
+    assert admin.payload.ssh_strong_crypto is True
     services, _ = ad.collect("services")
-    assert {s.name for s in services.payload.services} >= {"www", "www-ssl"}
+    names = {s.name for s in services.payload.services}
+    assert names >= {"www", "www-ssl", "bandwidth-server", "pptp", "cloud-ddns"}
+    by_name = {s.name: s for s in services.payload.services}
+    assert by_name["bandwidth-server"].enabled is False
+    assert by_name["pptp"].enabled is False
     ntp, _ = ad.collect("ntp")
-    assert ntp.payload.servers == ("1.1.1.1",)
+    assert ntp.payload.servers == ("1.1.1.1", "2.pool.ntp.org")
     dns, _ = ad.collect("dns")
     assert dns.payload.servers == ("8.8.8.8", "1.1.1.1")
     logging, _ = ad.collect("logging")
@@ -206,8 +226,13 @@ def test_mikrotik_collect_all_capabilities():
     assert policies.payload.policies[0].action == "accept"
     system, _ = ad.collect("system_info")
     assert system.payload.firmware.startswith("7.16")
+    assert system.payload.current_firmware == "7.16.1"
+    assert system.payload.update_status == "System is already up to date"
     assert system.vendor == "mikrotik"
     assert system.capability == "system_info"
+    l2, _ = ad.collect("l2_access")
+    assert l2.payload.discover_interface_list == "none"
+    assert l2.payload.mac_ping_enabled is False
     client.close()
 
 
@@ -371,11 +396,11 @@ def test_build_adapter_dispatch_and_implemented():
     mt_client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://192.0.2.1")
     mt = build_adapter(mt_session(), mt_client)
     assert isinstance(mt, MikrotikAdapter)
-    assert mt.implemented() == frozenset(CORE_CAPABILITIES)
+    assert mt.implemented() == frozenset(CORE_CAPABILITIES + MIKROTIK_EXTRAS)
     ft_client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://192.0.2.2")
     ft = build_adapter(ft_session("tok"), ft_client)
     assert isinstance(ft, FortinetAdapter)
-    assert ft.implemented() == frozenset(ALL_CAPABILITIES)
+    assert ft.implemented() == frozenset(CORE_CAPABILITIES + FORTINET_EXTRAS)
     mt_client.close()
     ft_client.close()
 

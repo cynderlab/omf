@@ -338,6 +338,13 @@ def test_local_in_present_and_virtual_patch():
         ),
     )
     assert virtual_patch_on_accept({"local_in": patched}, {}, "fortinet").status == "pass"
+    deny_only = ev(
+        "local_in",
+        LocalInPolicyList(
+            policies=(LocalInPolicy(id="2", enabled=True, action="deny", virtual_patch=False),)
+        ),
+    )
+    assert virtual_patch_on_accept({"local_in": deny_only}, {}, "fortinet").status == "pass"
 
 
 def test_ha_checks_standalone_and_active():

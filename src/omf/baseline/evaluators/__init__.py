@@ -17,6 +17,7 @@ from omf.baseline.evaluators.admin import (
     tls_versions_allowed,
 )
 from omf.baseline.evaluators.ha import ha_monitors_set, ha_reserved_mgmt
+from omf.baseline.evaluators.l2 import l2_surfaces_closed
 from omf.baseline.evaluators.local_in import local_in_present, virtual_patch_on_accept
 from omf.baseline.evaluators.logging import (
     faz_encrypted,
@@ -35,11 +36,12 @@ from omf.baseline.evaluators.policy import (
 )
 from omf.baseline.evaluators.services import (
     insecure_services_disabled,
+    named_services_disabled,
     services_not_unrestricted,
     wan_mgmt_disabled,
 )
 from omf.baseline.evaluators.snmp import no_default_snmp_community, snmp_memory_traps, snmp_not_legacy
-from omf.baseline.evaluators.system import firmware_present
+from omf.baseline.evaluators.system import firmware_present, firmware_update_current
 from omf.baseline.evaluators.utm import (
     stitch_enabled,
     utm_on_accept,
@@ -64,8 +66,10 @@ REGISTRY: dict[str, Evaluator] = {
     "lockout_configured": lockout_configured,
     "admin_ports_changed": admin_ports_changed,
     "insecure_services_disabled": insecure_services_disabled,
+    "named_services_disabled": named_services_disabled,
     "services_not_unrestricted": services_not_unrestricted,
     "wan_mgmt_disabled": wan_mgmt_disabled,
+    "l2_surfaces_closed": l2_surfaces_closed,
     "ntp_configured": ntp_configured,
     "dns_configured": dns_configured,
     "local_logging_enabled": local_logging_enabled,
@@ -81,6 +85,7 @@ REGISTRY: dict[str, Evaluator] = {
     "isdb_denies_present": isdb_denies_present,
     "policies_logged": policies_logged,
     "firmware_present": firmware_present,
+    "firmware_update_current": firmware_update_current,
     "intrazone_denied": intrazone_denied,
     "local_in_present": local_in_present,
     "virtual_patch_on_accept": virtual_patch_on_accept,

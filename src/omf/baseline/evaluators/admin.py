@@ -11,6 +11,30 @@ def idle_timeout_set(
     params: dict,
     vendor: str,
 ) -> CheckResult:
+    if params.get("mode") == "per_user":
+        allowed = {str(p).strip().lower() for p in params.get("policies", ("logout", "lockscreen", "lock"))}
+        hits = [
+            u.name
+            for u in evidence["users"].payload.users
+            if u.enabled
+            and (
+                (u.inactivity_policy or "") not in allowed
+                or u.inactivity_timeout_seconds is None
+                or u.inactivity_timeout_seconds <= 0
+            )
+        ]
+        return CheckResult(
+            check_id="",
+            status="fail" if hits else "pass",
+            severity="medium",
+            diagnostic=(
+                f"users missing inactivity logout/lock {hits!r}"
+                if hits
+                else "enabled users have inactivity timeout and policy"
+            ),
+            capability_refs=("users",),
+            observed={"names": hits},
+        )
     payload: AdminSettings = evidence["admin_settings"].payload
     timeout = payload.idle_timeout_seconds
     failed = timeout is None or timeout <= 0
@@ -164,9 +188,11 @@ def admin_ports_changed(evidence, params, vendor) -> CheckResult:
     payload = evidence["admin_settings"].payload
     http_bad = int(params.get("forbidden_http", 80))
     https_bad = int(params.get("forbidden_https", 443))
+    http_live = payload.admin_http_enabled is not False
+    https_live = payload.admin_https_enabled is not False
     failed = (
-        payload.admin_http_port == http_bad
-        or payload.admin_https_port == https_bad
+        (http_live and payload.admin_http_port == http_bad)
+        or (https_live and payload.admin_https_port == https_bad)
         or payload.admin_https_redirect is not False
     )
     return CheckResult(
@@ -181,6 +207,8 @@ def admin_ports_changed(evidence, params, vendor) -> CheckResult:
         observed={
             "admin_http_port": payload.admin_http_port,
             "admin_https_port": payload.admin_https_port,
+            "admin_http_enabled": payload.admin_http_enabled,
+            "admin_https_enabled": payload.admin_https_enabled,
             "admin_https_redirect": payload.admin_https_redirect,
         },
     )

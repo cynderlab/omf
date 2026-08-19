@@ -164,14 +164,13 @@ def _prompt_session(console: Console, prefs: UserPrefs) -> Session:
         LANGUAGE_OPTIONS,
         prefs.default_report_language,
     )
-    verify_tls = confirm("Verify TLS certificates?", default=True)
     return Session(
         vendor,
         url,
         creds["username"],
         creds["password"],
         creds["token"],
-        verify_tls,
+        False,
         language,
     )
 
@@ -255,6 +254,7 @@ _PHASE_LABEL = {
 
 _SPIN = ("●○○", "●●○", "●●●", "○●●", "○○●")
 _ACTIVE_LLM = frozenset({"", "start", "retry", "tool"})
+_SPAN_KEEP = 6
 
 
 def _short_model(name: str) -> str:
@@ -287,6 +287,7 @@ class _LiveState:
         self.llm_tool = ""
         self.llm_tool_check = ""
         self.llm_tool_cap = ""
+        self.llm_spans: list[dict] = []
         self.llm_started_at: float | None = None
         self.rows: dict[str, dict[str, str]] = {
             check_id: {"status": "", "diagnostic": "", "severity": ""}
@@ -315,6 +316,9 @@ class _LiveState:
 
     def _handle_llm(self, event: dict) -> None:
         status = str(event.get("status") or "start")
+        if status == "span":
+            self._push_span(event)
+            return
         self.llm_status = status
         if event.get("model"):
             self.llm_model = str(event["model"])
@@ -326,6 +330,7 @@ class _LiveState:
             self.llm_tool = ""
             self.llm_tool_check = ""
             self.llm_tool_cap = ""
+            self.llm_spans = []
             self.activity = f"generating via {label}"
         elif status == "tool":
             self.llm_tool = str(event.get("tool") or "")
@@ -340,6 +345,21 @@ class _LiveState:
                 "skipped": "no LLM configured — skeleton report",
                 "fallback": "LLM failed — skeleton report",
             }.get(status, status)
+
+    def _push_span(self, event: dict) -> None:
+        name = str(event.get("name") or "span")
+        state = str(event.get("state") or "")
+        ms = event.get("ms")
+        if not isinstance(ms, int):
+            ms = None
+        if state == "end":
+            for index in range(len(self.llm_spans) - 1, -1, -1):
+                row = self.llm_spans[index]
+                if row["name"] == name and row.get("ms") is None:
+                    self.llm_spans[index] = {"name": name, "ms": ms}
+                    return
+        self.llm_spans.append({"name": name, "ms": ms if state == "end" else None})
+        self.llm_spans = self.llm_spans[-_SPAN_KEEP:]
 
     def _model_label(self) -> str:
         return _short_model(self.llm_model) if self.llm_model else "LLM"
@@ -400,6 +420,9 @@ class _LiveState:
             body.append(f"{self._model_label()} · {self._elapsed_s()}s\n", style="cyan")
             if self.llm_tool:
                 body.append(f"last: {self.llm_tool}\n", style="dim")
+            for span in self.llm_spans:
+                duration = f"{span['ms']}ms" if span.get("ms") is not None else "…"
+                body.append(f"{duration}  {span['name']}\n", style="dim")
             body.append("no secrets on the wire", style="dim")
             parts.append(
                 Panel(

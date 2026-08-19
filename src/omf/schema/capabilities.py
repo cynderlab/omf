@@ -20,6 +20,7 @@ CapabilityName = Literal[
     "local_in",
     "ha",
     "utm",
+    "l2_access",
 ]
 
 CORE_CAPABILITIES: tuple[CapabilityName, ...] = (
@@ -34,12 +35,14 @@ CORE_CAPABILITIES: tuple[CapabilityName, ...] = (
     "system_info",
 )
 
-ALL_CAPABILITIES: tuple[CapabilityName, ...] = CORE_CAPABILITIES + (
+FORTINET_EXTRAS: tuple[CapabilityName, ...] = (
     "zones",
     "local_in",
     "ha",
     "utm",
 )
+MIKROTIK_EXTRAS: tuple[CapabilityName, ...] = ("l2_access",)
+ALL_CAPABILITIES: tuple[CapabilityName, ...] = CORE_CAPABILITIES + FORTINET_EXTRAS + MIKROTIK_EXTRAS
 
 Listen = Literal["all", "restricted", "unknown"]
 PolicyAction = Literal["accept", "deny", "drop", "other"]
@@ -53,6 +56,8 @@ class User(BaseModel):
     name: str
     enabled: bool
     groups: tuple[str, ...]
+    inactivity_timeout_seconds: int | None = None
+    inactivity_policy: str | None = None
 
 
 class UserList(BaseModel):
@@ -78,7 +83,10 @@ class AdminSettings(BaseModel):
     admin_lockout_duration: int | None = None
     admin_http_port: int | None = None
     admin_https_port: int | None = None
+    admin_http_enabled: bool | None = None
+    admin_https_enabled: bool | None = None
     admin_https_redirect: bool | None = None
+    ssh_strong_crypto: bool | None = None
 
 
 class Service(BaseModel):
@@ -128,6 +136,7 @@ class SnmpCommunity(BaseModel):
 
     name: str
     version: str
+    read_access: bool | None = None
 
 
 class SnmpUser(BaseModel):
@@ -163,6 +172,12 @@ class Policy(BaseModel):
     application_list: str | None = None
     internet_src: tuple[str, ...] = ()
     internet_dst: tuple[str, ...] = ()
+    chain: str = ""
+    connection_state: tuple[str, ...] = ()
+    in_interface: str = ""
+    out_interface: str = ""
+    in_interface_list: str = ""
+    out_interface_list: str = ""
 
 
 class PolicyList(BaseModel):
@@ -176,6 +191,19 @@ class SystemInfo(BaseModel):
 
     firmware: str
     model: str | None = None
+    current_firmware: str | None = None
+    update_status: str | None = None
+    installed_version: str | None = None
+    latest_version: str | None = None
+
+
+class L2Access(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    discover_interface_list: str
+    mac_telnet_interface_list: str
+    mac_winbox_interface_list: str
+    mac_ping_enabled: bool
 
 
 class Zone(BaseModel):

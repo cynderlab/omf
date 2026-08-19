@@ -14,7 +14,8 @@ from omf.adapters.base import CollectError, ProbeError
 from omf.adapters.normalize import as_any_token
 from omf.log import get_logger, http_target
 from omf.schema.capabilities import (
-    ALL_CAPABILITIES,
+    CORE_CAPABILITIES,
+    FORTINET_EXTRAS,
     AdminSettings,
     AutomationStitch,
     DnsConfig,
@@ -849,7 +850,7 @@ class FortinetAdapter:
         )
 
     def implemented(self) -> frozenset[str]:
-        return frozenset(ALL_CAPABILITIES)
+        return frozenset(CORE_CAPABILITIES + FORTINET_EXTRAS)
 
     def close(self) -> None:
         if self._logged_in:

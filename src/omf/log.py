@@ -45,3 +45,7 @@ def get_logger(name: str = ROOT) -> logging.Logger:
     if name != ROOT and not name.startswith(f"{ROOT}."):
         name = f"{ROOT}.{name}"
     return logging.getLogger(name)
+
+
+def debug_enabled() -> bool:
+    return get_logger().isEnabledFor(logging.DEBUG)

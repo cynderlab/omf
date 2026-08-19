@@ -18,7 +18,7 @@ def local_in_present(evidence, params, vendor) -> CheckResult:
 def virtual_patch_on_accept(evidence, params, vendor) -> CheckResult:
     accepts = [p for p in evidence["local_in"].payload.policies if p.enabled and p.action == "accept"]
     missing = [p.id for p in accepts if not p.virtual_patch]
-    failed = (not accepts) or bool(missing)
+    failed = bool(missing)
     return CheckResult(
         check_id="",
         status="fail" if failed else "pass",

@@ -6,15 +6,16 @@ import asyncio
 import inspect
 from collections.abc import Callable
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, capture_run_messages
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from omf.agent.tools import AnalysisContext, make_tools
+from omf.agent.trace import format_transcript, instrumentation_settings
 from omf.config import LlmSettings
-from omf.log import get_logger
+from omf.log import debug_enabled, get_logger
 
 _log = get_logger("omf.agent.llm")
 
@@ -81,14 +82,27 @@ def run_analysis(
         on_event(payload)
 
     agent = build_agent(ctx, settings, on_tool=on_tool)
+    if on_event is not None:
+        agent.instrument = instrumentation_settings(on_event)
+
     last_exc: BaseException | None = None
+    messages: list = []
     for _ in range(2):
         try:
-            _invoke_run(agent)
+            with capture_run_messages() as messages:
+                _invoke_run(agent)
+            _dump_transcript(messages, settings.api_key)
             if ctx.submitted:
                 return ctx.submitted[-1]
             last_exc = RuntimeError("agent did not call submit_report")
         except Exception as exc:
+            _dump_transcript(messages, settings.api_key)
             last_exc = exc
     assert last_exc is not None
     raise last_exc
+
+
+def _dump_transcript(messages: list, secret: str | None) -> None:
+    if not debug_enabled() or not messages:
+        return
+    _log.debug("%s", format_transcript(messages, secret=secret))

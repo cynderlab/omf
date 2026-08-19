@@ -53,8 +53,11 @@ def test_check_result_status_enum():
 from omf.schema.capabilities import (
     ALL_CAPABILITIES,
     CORE_CAPABILITIES,
+    FORTINET_EXTRAS,
+    MIKROTIK_EXTRAS,
     AdminSettings,
     HaConfig,
+    L2Access,
     LocalInPolicy,
     Policy,
     Service,
@@ -78,7 +81,9 @@ def test_core_capabilities_are_the_original_nine():
         "firewall_filter",
         "system_info",
     )
-    assert ALL_CAPABILITIES == CORE_CAPABILITIES + ("zones", "local_in", "ha", "utm")
+    assert FORTINET_EXTRAS == ("zones", "local_in", "ha", "utm")
+    assert MIKROTIK_EXTRAS == ("l2_access",)
+    assert ALL_CAPABILITIES == CORE_CAPABILITIES + FORTINET_EXTRAS + MIKROTIK_EXTRAS
 
 
 def test_admin_settings_optional_l1_defaults():
@@ -102,3 +107,10 @@ def test_new_capability_models_are_frozen():
     assert utm.stitches == ()
     lip = LocalInPolicy(id="1", enabled=True, action="accept", virtual_patch=False)
     assert lip.virtual_patch is False
+    l2 = L2Access(
+        discover_interface_list="none",
+        mac_telnet_interface_list="none",
+        mac_winbox_interface_list="none",
+        mac_ping_enabled=False,
+    )
+    assert l2.discover_interface_list == "none"

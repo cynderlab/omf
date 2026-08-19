@@ -1,1 +1,1 @@
-[{"name": "admin", "group": "full", "disabled": "false"}]
+[{"name": "admin", "group": "full", "disabled": "false", "inactivity-timeout": "10m", "inactivity-policy": "none"}]

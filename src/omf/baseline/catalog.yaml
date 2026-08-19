@@ -1,7 +1,7 @@
 checks:
   - id: FW-ADM-001
-    title: No generic default admin username
-    severity: high
+    title: Default admin username
+    severity: medium
     applies_to: [mikrotik, fortinet]
     needs: [users]
     evaluator: no_generic_accounts
@@ -17,22 +17,36 @@ checks:
     mitigation:
       generic: "Replace factory-default admin identities with unique named accounts."
       mikrotik: "Rename the default admin user under /user so the name is no longer admin."
-      fortinet: "Rename the default admin administrator. FortiOS does not allow deleting it."
+      fortinet: |
+        Replace the factory admin account. Create another super_admin first. You cannot delete the account you are logged in as.
+        config system admin
+            delete "admin"
+        end
   - id: FW-ADM-002
-    title: Admin idle timeout is set
+    title: Admin idle timeout
     severity: medium
     applies_to: [mikrotik, fortinet]
-    needs: [admin_settings]
+    needs: [admin_settings, users]
     evaluator: idle_timeout_set
     params:
       default: {}
+      mikrotik:
+        mode: per_user
+        policies: [logout, lockscreen, lock]
       fortinet:
         max_seconds: 900
     mitigation:
       generic: "Configure a non-zero administrative idle timeout."
-      fortinet: "In config system global, set admintimeout to 15 minutes or less."
+      mikrotik: |
+        Set inactivity timeout and policy on every user (logout or lockscreen).
+        /user/set [find] inactivity-timeout=10m inactivity-policy=logout
+      fortinet: |
+        Set administrative idle timeout to 15 minutes or less (CIS example uses 5).
+        config system global
+            set admintimeout 5
+        end
   - id: FW-ADM-003
-    title: Device identity is not the factory default
+    title: Device identity
     severity: low
     applies_to: [mikrotik, fortinet]
     needs: [admin_settings]
@@ -41,8 +55,13 @@ checks:
       default: {}
     mitigation:
       generic: "Set a unique hostname that identifies the device and site."
+      fortinet: |
+        Set a unique hostname that identifies the device and site.
+        config system global
+            set hostname <hostname>
+        end
   - id: FW-ADM-004
-    title: Pre-login banner is enabled
+    title: Pre-login banner
     severity: medium
     applies_to: [fortinet]
     needs: [admin_settings]
@@ -52,9 +71,13 @@ checks:
         field: pre_login_banner
     mitigation:
       generic: "Enable a pre-login legal banner on the administrative login page."
-      fortinet: "In config system global, set pre-login-banner enable. Edit the pre-login replacement message so it is a warning, not a welcome."
+      fortinet: |
+        Enable a pre-login legal banner. Edit the replacement message so it is a warning, not a welcome.
+        config system global
+            set pre-login-banner enable
+        end
   - id: FW-ADM-005
-    title: Post-login banner is enabled
+    title: Post-login banner
     severity: medium
     applies_to: [fortinet]
     needs: [admin_settings]
@@ -64,20 +87,31 @@ checks:
         field: post_login_banner
     mitigation:
       generic: "Enable a post-login banner that the administrator must acknowledge."
-      fortinet: "In config system global, set post-login-banner enable."
+      fortinet: |
+        Enable a post-login banner that the administrator must acknowledge.
+        config system global
+            set post-login-banner enable
+        end
   - id: FW-ADM-006
-    title: Timezone is configured
+    title: Timezone
     severity: low
-    applies_to: [fortinet]
+    applies_to: [mikrotik, fortinet]
     needs: [admin_settings]
     evaluator: timezone_set
     params:
       default: {}
     mitigation:
       generic: "Set the device timezone to the site local zone so logs and certificates line up."
-      fortinet: "In config system global, set timezone to the site zone id."
+      fortinet: |
+        Set the device timezone to the site local zone id.
+        config system global
+            set timezone <id>
+        end
+      mikrotik: |
+        Set the device timezone to the site local zone.
+        /system clock/set time-zone-name=<timezone>
   - id: FW-ADM-007
-    title: Management GUI uses TLS 1.3 only
+    title: Management GUI TLS versions
     severity: high
     applies_to: [fortinet]
     needs: [admin_settings]
@@ -87,9 +121,13 @@ checks:
         allowed: [tlsv1-3]
     mitigation:
       generic: "Restrict the administrative HTTPS listener to TLS 1.3."
-      fortinet: "In config system global, set admin-https-ssl-versions tlsv1-3."
+      fortinet: |
+        Restrict the administrative HTTPS listener to TLS 1.3.
+        config system global
+            set admin-https-ssl-versions tlsv1-3
+        end
   - id: FW-ADM-008
-    title: Single CPU core high usage is logged
+    title: Single-CPU high usage logging
     severity: medium
     applies_to: [fortinet]
     needs: [admin_settings]
@@ -99,22 +137,37 @@ checks:
         field: log_single_cpu_high
     mitigation:
       generic: "Log an event when any single CPU core exceeds the usage threshold."
-      fortinet: "In config system global, set log-single-cpu-high enable."
+      fortinet: |
+        Log an event when any single CPU core exceeds the usage threshold.
+        config system global
+            set log-single-cpu-high enable
+        end
   - id: FW-ADM-009
-    title: Administrator password policy meets length 14
-    severity: high
-    applies_to: [fortinet]
+    title: Administrator password policy
+    severity: medium
+    applies_to: [mikrotik, fortinet]
     needs: [admin_settings]
     evaluator: password_policy_strong
     params:
       default:
         min_length: 14
         apply_to: [admin-password]
+      fortinet:
+        apply_to: [admin-password, ipsec-preshared-key]
     mitigation:
       generic: "Enable a password policy with minimum length 14 for administrator passwords."
-      fortinet: "In config system password-policy, set status enable, apply-to admin-password, and minimum-length 14."
+      fortinet: |
+        Enable a password policy with minimum length 14 for administrator passwords.
+        config system password-policy
+            set status enable
+            set apply-to admin-password ipsec-preshared-key
+            set minimum-length 14
+        end
+      mikrotik: |
+        Set a minimum administrator password length of 14.
+        /user settings/set minimum-password-length=14
   - id: FW-ADM-010
-    title: Administrator lockout threshold and duration are bounded
+    title: Administrator lockout
     severity: medium
     applies_to: [fortinet]
     needs: [admin_settings]
@@ -125,11 +178,16 @@ checks:
         max_duration: 900
     mitigation:
       generic: "Lock an admin source after at most 3 failures for at most 900 seconds."
-      fortinet: "In config system global, set admin-lockout-threshold 3 and admin-lockout-duration 900."
+      fortinet: |
+        Lock an admin source after at most 3 failures for at most 900 seconds.
+        config system global
+            set admin-lockout-threshold 3
+            set admin-lockout-duration 900
+        end
   - id: FW-ADM-011
-    title: Default administrative HTTP and HTTPS ports are changed
-    severity: medium
-    applies_to: [fortinet]
+    title: Administrative HTTP/HTTPS ports
+    severity: low
+    applies_to: [mikrotik, fortinet]
     needs: [admin_settings]
     evaluator: admin_ports_changed
     params:
@@ -138,9 +196,19 @@ checks:
         forbidden_https: 443
     mitigation:
       generic: "Move administrative HTTP/HTTPS off 80/443 and disable HTTP-to-HTTPS redirect that still binds 80."
-      fortinet: "In config system global, set admin-https-redirect disable, set admin-port to a non-80 port, and set admin-sport to a non-443 port. Avoid 8080, 8081, 4433, and 10443."
+      fortinet: |
+        Move administrative HTTP/HTTPS off 80/443 and disable HTTP-to-HTTPS redirect. Avoid 8080, 8081, 4433, and 10443.
+        config system global
+            set admin-https-redirect disable
+            set admin-port <http-port>
+            set admin-sport <https-port>
+        end
+      mikrotik: |
+        Move www and www-ssl off 80/443.
+        /ip service/set [find name=www] port=<http-port>
+        /ip service/set [find name=www-ssl] port=<https-port>
   - id: FW-SVC-001
-    title: Insecure management services are disabled
+    title: Insecure management services
     severity: high
     applies_to: [mikrotik, fortinet]
     needs: [services]
@@ -149,8 +217,14 @@ checks:
       default: {}
     mitigation:
       generic: "Disable telnet, ftp, and cleartext HTTP management services."
+      fortinet: |
+        Allow only encrypted administrative access. Do not include http or telnet.
+        config system interface
+            edit <interface>
+            set allowaccess ssh https ping snmp
+        end
   - id: FW-SVC-002
-    title: Management services are not open to all
+    title: Management service listen scope
     severity: high
     applies_to: [mikrotik, fortinet]
     needs: [services]
@@ -159,8 +233,14 @@ checks:
       default: {}
     mitigation:
       generic: "Restrict management services to trusted addresses or interfaces."
+      fortinet: |
+        Restrict each administrator to trusted hosts. Do not use 0.0.0.0/0.
+        config system admin
+            edit <admin>
+            set trusthost1 <network> <mask>
+        end
   - id: FW-SVC-003
-    title: WAN interfaces have no management services
+    title: WAN management services
     severity: high
     applies_to: [fortinet]
     needs: [services]
@@ -169,9 +249,91 @@ checks:
       default: {}
     mitigation:
       generic: "Disable administrative access on WAN interfaces."
-      fortinet: "On each WAN interface, unselect allowaccess for ping, https, http, ssh, snmp, and radius-acct. Manage the device from a dedicated interface."
+      fortinet: |
+        Disable administrative access on each WAN interface. Manage the device from a dedicated interface.
+        config system interface
+            edit <wan-interface>
+            unselect allowaccess ping https ssh snmp http radius-acct
+        end
+  - id: FW-SVC-004
+    title: Auxiliary services
+    severity: low
+    applies_to: [mikrotik]
+    needs: [services]
+    evaluator: named_services_disabled
+    params:
+      default:
+        names: [bandwidth-server, proxy, socks, upnp, cloud-ddns, cloud-update-time]
+    mitigation:
+      generic: "Disable bandwidth-server, proxy, SOCKS, UPnP, and MikroTik cloud extras."
+      mikrotik: |
+        Disable production extras that are off in a default hardening.
+        /tool bandwidth-server/set enabled=no
+        /ip proxy/set enabled=no
+        /ip socks/set enabled=no
+        /ip upnp/set enabled=no
+        /ip cloud/set ddns-enabled=no update-time=no
+  - id: FW-SVC-005
+    title: SSH strong crypto
+    severity: medium
+    applies_to: [mikrotik]
+    needs: [admin_settings]
+    evaluator: flag_enabled
+    params:
+      default:
+        field: ssh_strong_crypto
+    mitigation:
+      generic: "Enable strict SSH crypto (modern ciphers, no SHA1)."
+      mikrotik: |
+        Enable strong SSH crypto.
+        /ip ssh/set strong-crypto=yes
+  - id: FW-L2-001
+    title: Neighbor discovery
+    severity: low
+    applies_to: [mikrotik]
+    needs: [l2_access]
+    evaluator: l2_surfaces_closed
+    params:
+      default:
+        lists: [discover_interface_list]
+    mitigation:
+      generic: "Disable neighbor discovery on all interfaces."
+      mikrotik: |
+        Disable MNDP/CDP/LLDP announcements.
+        /ip neighbor discovery-settings/set discover-interface-list=none
+  - id: FW-L2-002
+    title: MAC management access
+    severity: high
+    applies_to: [mikrotik]
+    needs: [l2_access]
+    evaluator: l2_surfaces_closed
+    params:
+      default:
+        lists: [mac_telnet_interface_list, mac_winbox_interface_list]
+        flags_off: [mac_ping_enabled]
+    mitigation:
+      generic: "Disable MAC Telnet, MAC Winbox, and MAC ping."
+      mikrotik: |
+        Close Layer-2 management that bypasses the IP filter.
+        /tool mac-server/set allowed-interface-list=none
+        /tool mac-server mac-winbox/set allowed-interface-list=none
+        /tool mac-server ping/set enabled=no
+  - id: FW-VPN-001
+    title: PPTP server
+    severity: high
+    applies_to: [mikrotik]
+    needs: [services]
+    evaluator: named_services_disabled
+    params:
+      default:
+        names: [pptp]
+    mitigation:
+      generic: "Disable the PPTP server. MikroTik does not recommend PPTP."
+      mikrotik: |
+        Disable the PPTP server. Prefer WireGuard or another current VPN.
+        /interface pptp-server server/set enabled=no
   - id: FW-NET-001
-    title: Intra-zone traffic is denied
+    title: Intra-zone traffic
     severity: medium
     applies_to: [fortinet]
     needs: [zones]
@@ -180,10 +342,15 @@ checks:
       default: {}
     mitigation:
       generic: "Do not allow unrestricted traffic between interfaces in the same zone."
-      fortinet: "In config system zone, set intrazone deny on each zone (GUI: Block intra-zone traffic)."
+      fortinet: |
+        Block intra-zone traffic on each zone.
+        config system zone
+            edit <zone>
+            set intrazone deny
+        end
   - id: FW-NTP-001
-    title: NTP is enabled with at least one server
-    severity: medium
+    title: NTP servers
+    severity: low
     applies_to: [mikrotik, fortinet]
     needs: [ntp]
     evaluator: ntp_configured
@@ -191,8 +358,19 @@ checks:
       default: {}
     mitigation:
       generic: "Enable NTP and point it at trusted time servers."
+      fortinet: |
+        Enable NTP and point it at trusted time servers.
+        config system ntp
+            set ntpsync enable
+            set type custom
+            config ntpserver
+                edit 1
+                    set server <ntp-server>
+                next
+            end
+        end
   - id: FW-DNS-001
-    title: DNS servers are configured
+    title: DNS servers
     severity: low
     applies_to: [mikrotik, fortinet]
     needs: [dns]
@@ -201,8 +379,14 @@ checks:
       default: {}
     mitigation:
       generic: "Configure explicit DNS servers, preferably internal."
+      fortinet: |
+        Configure explicit DNS servers, preferably internal or otherwise trusted.
+        config system dns
+            set primary <ip>
+            set secondary <ip>
+        end
   - id: FW-LOG-001
-    title: Local logging is enabled
+    title: Local logging
     severity: medium
     applies_to: [mikrotik, fortinet]
     needs: [logging]
@@ -212,7 +396,7 @@ checks:
     mitigation:
       generic: "Enable local logging so administrative actions are recorded on-box."
   - id: FW-LOG-002
-    title: Remote syslog is configured
+    title: Remote syslog
     severity: medium
     applies_to: [mikrotik, fortinet]
     needs: [logging]
@@ -221,8 +405,12 @@ checks:
       default: {}
     mitigation:
       generic: "Send logs to a remote syslog collector that you control."
+      mikrotik: |
+        Create a remote logging action with a real collector, then a rule that uses it.
+        /system logging action/set [find name=remote] remote=<syslog-host>
+        /system logging/add topics=info action=remote
   - id: FW-LOG-003
-    title: Remote syslog uses reliable high encryption
+    title: Remote syslog encryption
     severity: medium
     applies_to: [fortinet]
     needs: [logging]
@@ -231,9 +419,14 @@ checks:
       default: {}
     mitigation:
       generic: "Encrypt remote syslog with a reliable transport and high-strength algorithm, or disable remote syslog."
-      fortinet: "In config log syslogd setting, set status enable, set reliable enable, and set enc-algorithm high."
+      fortinet: |
+        Encrypt remote syslog with a reliable transport and high-strength algorithm.
+        config log syslogd setting
+            set reliable enable
+            set enc-algorithm high
+        end
   - id: FW-LOG-004
-    title: FortiAnalyzer logging uses reliable high encryption
+    title: FortiAnalyzer log encryption
     severity: medium
     applies_to: [fortinet]
     needs: [logging]
@@ -242,9 +435,14 @@ checks:
       default: {}
     mitigation:
       generic: "Encrypt FortiAnalyzer/FortiManager log shipping with a reliable transport and high-strength algorithm, or disable FAZ logging."
-      fortinet: "In config log fortianalyzer setting, set status enable, set reliable enable, and set enc-algorithm high."
+      fortinet: |
+        Encrypt FortiAnalyzer or FortiManager log shipping with a reliable transport and high-strength algorithm.
+        config log fortianalyzer setting
+            set reliable enable
+            set enc-algorithm high
+        end
   - id: FW-SNMP-001
-    title: No default SNMP community
+    title: Default SNMP communities
     severity: high
     applies_to: [mikrotik, fortinet]
     needs: [snmp]
@@ -252,23 +450,42 @@ checks:
     params:
       default:
         forbidden: [public, private]
+      mikrotik:
+        require_read_access: true
     mitigation:
       generic: "Remove public/private communities. Prefer SNMPv3 or disable SNMP."
+      fortinet: |
+        Remove default SNMPv1/v2c communities. Prefer SNMPv3 or disable SNMP.
+        config system snmp community
+            delete <community-id>
+        end
   - id: FW-SNMP-002
-    title: SNMP is disabled or uses v3-only communities
+    title: SNMP protocol version
     severity: medium
     applies_to: [mikrotik, fortinet]
     needs: [snmp]
     evaluator: snmp_not_legacy
     params:
       default: {}
+      mikrotik:
+        legacy_versions: [none]
       fortinet:
         require_v3_user: true
     mitigation:
       generic: "Disable SNMP if unused, or configure SNMPv3 only."
-      fortinet: "Disable SNMP, or remove v1/v2c communities and configure at least one SNMPv3 user under config system snmp user."
+      fortinet: |
+        Disable SNMP, or remove v1/v2c communities and add at least one SNMPv3 user with auth-priv.
+        config system snmp sysinfo
+            set status enable
+        end
+        config system snmp user
+            edit <name>
+            set security-level auth-priv
+            set auth-proto sha256
+            set priv-proto aes256
+        end
   - id: FW-SNMP-003
-    title: SNMP memory trap thresholds are configured
+    title: SNMP memory trap thresholds
     severity: medium
     applies_to: [fortinet]
     needs: [snmp]
@@ -277,41 +494,68 @@ checks:
       default: {}
     mitigation:
       generic: "When SNMP is enabled, set free-memory and freeable-memory trap thresholds above zero."
-      fortinet: "In config system snmp sysinfo, set trap-free-memory-threshold and trap-freeable-memory-threshold to values greater than 0."
+      fortinet: |
+        When SNMP is enabled, set memory trap thresholds (CIS example: 20 and 50).
+        config system snmp sysinfo
+            set trap-free-memory-threshold 20
+            set trap-freeable-memory-threshold 50
+        end
   - id: FW-POL-001
-    title: No unrestricted accept policy
+    title: Unrestricted accept policies
     severity: high
     applies_to: [mikrotik, fortinet]
     needs: [firewall_filter]
     evaluator: no_any_any_accept
     params:
       default: {}
+      mikrotik:
+        skip_established: true
+        skip_interface_scoped: true
     mitigation:
       generic: "Remove or tighten any accept rule that allows any source, destination, and service."
   - id: FW-POL-002
-    title: Explicit deny is present
-    severity: medium
+    title: Explicit deny policy
+    severity: high
     applies_to: [mikrotik]
     needs: [firewall_filter]
     evaluator: explicit_deny_present
     params:
-      default: {}
+      default:
+        chains: [input, forward]
+        unrestricted_only: true
     mitigation:
       generic: "Add a final drop/deny rule so unmatched traffic is explicitly denied."
-      mikrotik: "Add a last /ip/firewall/filter rule with action=drop."
+      mikrotik: |
+        Add a last drop on input and forward.
+        /ip firewall filter/add chain=input action=drop
+        /ip firewall filter/add chain=forward action=drop
   - id: FW-POL-003
-    title: Policies do not use ALL as service
-    severity: high
-    applies_to: [fortinet]
+    title: Policy service selection
+    severity: medium
+    applies_to: [mikrotik, fortinet]
     needs: [firewall_filter]
     evaluator: no_unrestricted_service
     params:
       default: {}
+      mikrotik:
+        actions: [accept]
+        skip_established: true
+        skip_interface_scoped: true
+      fortinet:
+        actions: [accept]
     mitigation:
       generic: "Replace unrestricted ALL/any service selections with explicit service objects."
-      fortinet: "In each firewall policy, replace service ALL with the specific services required."
+      fortinet: |
+        Replace service ALL with the specific services required.
+        config firewall policy
+            edit <id>
+            set service "<svc1>" "<svc2>"
+        end
+      mikrotik: |
+        Restrict a specific accept rule to an explicit protocol and destination port. Leave the final drop as any.
+        /ip firewall filter/set [find comment=mgmt] protocol=tcp dst-port=22,443
   - id: FW-POL-004
-    title: ISDB deny policies cover Tor and malicious services
+    title: ISDB deny policies
     severity: high
     applies_to: [fortinet]
     needs: [firewall_filter]
@@ -320,9 +564,35 @@ checks:
       default: {}
     mitigation:
       generic: "Add deny policies that cover the required inbound and outbound Internet Service Database entries."
-      fortinet: "Create enabled deny policies whose internet-service-src and internet-service destinations cover the CIS 7.4.5 ISDB name sets."
+      fortinet: |
+        Add enabled deny policies for the inbound and outbound ISDB sets.
+        config firewall policy
+            edit <inbound-id>
+            set srcintf any
+            set dstintf any
+            set internet-service-src enable
+            set internet-service-src-name "Tor-Exit.Node" "Tor-Relay.Node" "Censys-Scanner" "Shodan-Scanner" "Botnet-C&C.Server" "Phishing-Phishing.Server" "Proxy-Proxy.Server" "Spam-Spamming.Server" "VPN-Anonymous.VPN" "Malicious-Malicious.Server"
+            set dstaddr all
+            set service ALL
+            set schedule always
+            set action deny
+            set logtraffic all
+            set status enable
+        end
+        config firewall policy
+            edit <outbound-id>
+            set srcintf any
+            set dstintf any
+            set srcaddr all
+            set internet-service enable
+            set internet-service-name "Tor-Relay.Node" "Botnet-C&C.Server" "Phishing-Phishing.Server" "Proxy-Proxy.Server" "Spam-Spamming.Server" "VPN-Anonymous.VPN" "Malicious-Malicious.Server"
+            set schedule always
+            set action deny
+            set logtraffic all
+            set status enable
+        end
   - id: FW-POL-005
-    title: Logging is enabled on policies and implicit deny
+    title: Policy logging
     severity: medium
     applies_to: [fortinet]
     needs: [firewall_filter, logging]
@@ -331,9 +601,17 @@ checks:
       default: {}
     mitigation:
       generic: "Enable logging on every firewall policy and log the implicit deny."
-      fortinet: "Set logtraffic all on each policy, and in config log setting set fwpolicy-implicit-log enable."
+      fortinet: |
+        Enable logging on every firewall policy and log the implicit deny.
+        config firewall policy
+            edit <id>
+            set logtraffic all
+        end
+        config log setting
+            set fwpolicy-implicit-log enable
+        end
   - id: FW-LIP-001
-    title: Local-in policies are present
+    title: Local-in policies
     severity: medium
     applies_to: [fortinet]
     needs: [local_in]
@@ -342,9 +620,19 @@ checks:
       default: {}
     mitigation:
       generic: "Add at least one local-in policy."
-      fortinet: "In config firewall local-in-policy, add at least one enabled local-in policy."
+      fortinet: |
+        Add at least one local-in policy.
+        config firewall local-in-policy
+            edit <id>
+            set intf <interface>
+            set srcaddr <addr>
+            set dstaddr all
+            set action deny
+            set service <service>
+            set schedule always
+        end
   - id: FW-LIP-002
-    title: Virtual patch is enabled on accept local-in policies
+    title: Local-in virtual patch
     severity: high
     applies_to: [fortinet]
     needs: [local_in]
@@ -353,9 +641,14 @@ checks:
       default: {}
     mitigation:
       generic: "Enable virtual patch on every accept local-in policy."
-      fortinet: "On every accept local-in policy, set virtual-patch enable."
+      fortinet: |
+        Enable virtual patch on every accept local-in policy.
+        config firewall local-in-policy
+            edit <id>
+            set virtual-patch enable
+        end
   - id: FW-HA-001
-    title: HA monitor interfaces are set
+    title: HA monitor interfaces
     severity: medium
     applies_to: [fortinet]
     needs: [ha]
@@ -364,9 +657,13 @@ checks:
       default: {}
     mitigation:
       generic: "Configure HA monitor interfaces when HA is enabled."
-      fortinet: "In config system ha, set monitor to at least one interface."
+      fortinet: |
+        Configure HA monitor interfaces when HA is enabled.
+        config system ha
+            set monitor <if1> <if2>
+        end
   - id: FW-HA-002
-    title: HA reserved management is configured
+    title: HA reserved management
     severity: medium
     applies_to: [fortinet]
     needs: [ha]
@@ -375,9 +672,19 @@ checks:
       default: {}
     mitigation:
       generic: "Enable HA reserved management interfaces when HA is enabled."
-      fortinet: "In config system ha, set ha-mgmt-status enable and configure ha-mgmt-interfaces."
+      fortinet: |
+        Enable HA reserved management when HA is enabled.
+        config system ha
+            set ha-mgmt-status enable
+            config ha-mgmt-interfaces
+                edit 1
+                    set interface <interface>
+                    set gateway <gateway>
+                next
+            end
+        end
   - id: FW-UTM-001
-    title: IPS sensor is set on accept policies
+    title: IPS sensor on accept policies
     severity: high
     applies_to: [fortinet]
     needs: [firewall_filter]
@@ -387,9 +694,14 @@ checks:
         field: ips_sensor
     mitigation:
       generic: "Attach an IPS sensor to every enabled accept policy."
-      fortinet: "On every accept firewall policy, set ips-sensor to an IPS sensor."
+      fortinet: |
+        Attach an IPS sensor to every enabled accept policy.
+        config firewall policy
+            edit <id>
+            set ips-sensor <profile>
+        end
   - id: FW-UTM-002
-    title: DNS filter logs all queries
+    title: DNS filter query logging
     severity: medium
     applies_to: [fortinet]
     needs: [utm]
@@ -399,9 +711,14 @@ checks:
         kind: dnsfilter
     mitigation:
       generic: "Enable full query logging on at least one DNS filter profile."
-      fortinet: "In a DNS filter profile, set log-all-domain enable."
+      fortinet: |
+        Enable full query logging on at least one DNS filter profile.
+        config dnsfilter profile
+            edit <profile>
+            set log-all-domain enable
+        end
   - id: FW-UTM-003
-    title: DNS filter is set on accept policies
+    title: DNS filter on accept policies
     severity: high
     applies_to: [fortinet]
     needs: [firewall_filter]
@@ -411,9 +728,14 @@ checks:
         field: dnsfilter_profile
     mitigation:
       generic: "Attach a DNS filter profile to every enabled accept policy."
-      fortinet: "On every accept firewall policy, set dnsfilter-profile to a DNS filter profile."
+      fortinet: |
+        Attach a DNS filter profile to every enabled accept policy.
+        config firewall policy
+            edit <id>
+            set dnsfilter-profile <profile>
+        end
   - id: FW-UTM-004
-    title: Web filter blocks malicious, phishing, and spam
+    title: Web filter categories
     severity: high
     applies_to: [fortinet]
     needs: [utm]
@@ -423,9 +745,29 @@ checks:
         kind: webfilter
     mitigation:
       generic: "Block malicious, phishing, and spam web categories in at least one web filter profile."
-      fortinet: "In a web filter profile FortiGuard category filter, set Malicious Websites, Phishing, and Spam to Block."
+      fortinet: |
+        Block Malicious Websites, Phishing, and Spam URLs in at least one web filter profile.
+        config webfilter profile
+            edit <profile>
+            config ftgd-wf
+                config filters
+                    edit 1
+                        set category 26
+                        set action block
+                    next
+                    edit 2
+                        set category 61
+                        set action block
+                    next
+                    edit 3
+                        set category 86
+                        set action block
+                    next
+                end
+            end
+        end
   - id: FW-UTM-005
-    title: Application control blocks P2P and proxy
+    title: Application control categories
     severity: high
     applies_to: [fortinet]
     needs: [utm]
@@ -435,9 +777,23 @@ checks:
         kind: appctrl
     mitigation:
       generic: "Block P2P and proxy application categories in at least one application control profile."
-      fortinet: "In an application control profile, set the P2P and Proxy categories to Block."
+      fortinet: |
+        Block the P2P and Proxy application categories.
+        config application list
+            edit <profile>
+            config entries
+                edit 1
+                    set category 2
+                    set action block
+                next
+                edit 2
+                    set category 6
+                    set action block
+                next
+            end
+        end
   - id: FW-UTM-006
-    title: Application control has no allow categories
+    title: Application control allow categories
     severity: high
     applies_to: [fortinet]
     needs: [utm]
@@ -447,9 +803,18 @@ checks:
         kind: appctrl
     mitigation:
       generic: "Do not set application-control categories to Allow; use monitor or block."
-      fortinet: "In each application control profile, do not set any category action to Allow."
+      fortinet: |
+        Change any application-control category Action Allow to Monitor.
+        config application list
+            edit <profile>
+            config entries
+                edit <id>
+                    set action monitor
+                next
+            end
+        end
   - id: FW-UTM-007
-    title: Application control is set on accept policies
+    title: Application control on accept policies
     severity: high
     applies_to: [fortinet]
     needs: [firewall_filter]
@@ -459,9 +824,14 @@ checks:
         field: application_list
     mitigation:
       generic: "Attach an application control profile to every enabled accept policy."
-      fortinet: "On every accept firewall policy, set application-list to an application control profile."
+      fortinet: |
+        Attach an application control profile to every enabled accept policy.
+        config firewall policy
+            edit <id>
+            set application-list <profile>
+        end
   - id: FW-FAB-001
-    title: Compromised Host Quarantine stitch is enabled
+    title: Compromised Host Quarantine stitch
     severity: high
     applies_to: [fortinet]
     needs: [utm]
@@ -470,14 +840,38 @@ checks:
       default: {}
     mitigation:
       generic: "Enable the Compromised Host Quarantine automation stitch."
-      fortinet: "In config system automation-stitch, enable Compromised Host Quarantine."
+      fortinet: |
+        Enable the Compromised Host Quarantine automation stitch.
+        config system automation-stitch
+            edit "Compromised Host Quarantine"
+            set status enable
+        end
   - id: FW-SYS-001
-    title: Firmware version is recorded
-    severity: info
+    title: Firmware version
+    severity: low
     applies_to: [mikrotik, fortinet]
     needs: [system_info]
     evaluator: firmware_present
     params:
       default: {}
+      mikrotik:
+        match_current: true
     mitigation:
       generic: "Record the firmware version and compare it to the vendor advisory feed offline."
+      mikrotik: |
+        Keep RouterBOARD firmware on the same version as the installed RouterOS package.
+        /system routerboard/upgrade
+  - id: FW-SYS-002
+    title: RouterOS update status
+    severity: high
+    applies_to: [mikrotik]
+    needs: [system_info]
+    evaluator: firmware_update_current
+    params:
+      default: {}
+    mitigation:
+      generic: "Keep RouterOS on the latest version published for the configured channel."
+      mikrotik: |
+        Check for updates and install the latest package for the selected channel.
+        /system package update/check-for-updates
+        /system package update/install

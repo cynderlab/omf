@@ -1,4 +1,4 @@
 [
-  {"chain": "forward", "action": "accept", "src-address": "0.0.0.0/0", "dst-address": "", "protocol": ""},
+  {"chain": "forward", "action": "accept", "src-address": "0.0.0.0/0", "dst-address": "", "protocol": "", "connection-state": "established,related"},
   {"chain": "forward", "action": "drop"}
 ]

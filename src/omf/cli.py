@@ -17,7 +17,7 @@ Usage:
   omf help         Show this help
 
 Flags:
-  -v, --debug      DEBUG logs on stderr (HTTP URLs, phases; no secrets)
+  -v, --debug      DEBUG on stderr (HTTP URLs, LLM transcript; no secrets)
 """
 
 

@@ -15,8 +15,10 @@ from omf.adapters.normalize import as_any_token
 from omf.log import get_logger, http_target
 from omf.schema.capabilities import (
     CORE_CAPABILITIES,
+    MIKROTIK_EXTRAS,
     AdminSettings,
     DnsConfig,
+    L2Access,
     LoggingConfig,
     NtpConfig,
     Policy,
@@ -144,34 +146,113 @@ def _service_tokens(item: dict[str, Any]) -> tuple[str, ...]:
     return (f"{proto}/{port}",)
 
 
+def _csv_tokens(value: object) -> tuple[str, ...]:
+    if value in (None, ""):
+        return ()
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item).strip().lower() for item in value if str(item).strip())
+    return tuple(part.strip().lower() for part in str(value).split(",") if part.strip())
+
+
 def mikrotik_users(raw: object) -> UserList:
     users: list[User] = []
     for item in _as_records(raw):
         group = item.get("group")
         groups = (str(group),) if group not in (None, "") else ()
+        policy = item.get("inactivity-policy")
         users.append(
             User(
                 name=str(item.get("name") or ""),
                 enabled=_enabled(item),
                 groups=groups,
+                inactivity_timeout_seconds=_parse_timeout(item.get("inactivity-timeout")),
+                inactivity_policy=None if policy in (None, "") else str(policy).strip().lower(),
             )
         )
     return UserList(users=tuple(users))
 
 
-def mikrotik_admin_settings(identity_raw: object, settings_raw: object) -> AdminSettings:
+def _as_int(value: object) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def _find_service(services: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
+    for item in services:
+        if str(item.get("name") or "").strip().lower() == name:
+            return item
+    return None
+
+
+def _service_port(services: list[dict[str, Any]], name: str) -> int | None:
+    item = _find_service(services, name)
+    return None if item is None else _as_int(item.get("port"))
+
+
+def _service_enabled(services: list[dict[str, Any]], name: str) -> bool | None:
+    item = _find_service(services, name)
+    return None if item is None else _enabled(item)
+
+
+def mikrotik_admin_settings(
+    identity_raw: object,
+    settings_raw: object,
+    clock_raw: object | None = None,
+    service_raw: object | None = None,
+    ssh_raw: object | None = None,
+) -> AdminSettings:
     identity = _as_record(identity_raw)
     settings = _as_record(settings_raw)
+    clock = _as_record(clock_raw)
     timeout_raw = settings.get("minimum-timeout")
     if timeout_raw is None:
         timeout_raw = settings.get("session-timeout")
+    min_length = _as_int(settings.get("minimum-password-length"))
+    zone = clock.get("time-zone-name")
+    if zone in (None, ""):
+        zone = clock.get("time-zone")
+    services = _as_records(service_raw)
+    ssh = _as_record(ssh_raw)
+    ssh_strong = None
+    if "strong-crypto" in ssh:
+        ssh_strong = _as_bool(ssh.get("strong-crypto"))
     return AdminSettings(
         hostname=str(identity.get("name") or ""),
         idle_timeout_seconds=_parse_timeout(timeout_raw) if timeout_raw is not None else None,
+        timezone=None if zone in (None, "") else str(zone).strip(),
+        password_policy_enabled=min_length is not None and min_length > 0,
+        password_min_length=min_length,
+        password_apply_to=("admin-password",) if min_length is not None and min_length > 0 else (),
+        admin_http_port=_service_port(services, "www"),
+        admin_https_port=_service_port(services, "www-ssl"),
+        admin_http_enabled=_service_enabled(services, "www"),
+        admin_https_enabled=_service_enabled(services, "www-ssl"),
+        admin_https_redirect=False if services else None,
+        ssh_strong_crypto=ssh_strong,
     )
 
 
-def mikrotik_services(raw: object) -> ServiceList:
+def _synthetic_service(name: str, enabled: bool) -> Service:
+    return Service(name=name, enabled=enabled, port=0, listen="restricted")
+
+
+def _setting_enabled(raw: object, key: str = "enabled") -> bool:
+    item = _as_record(raw)
+    if key not in item:
+        return False
+    return _as_bool(item.get(key), default=False)
+
+
+def mikrotik_services(raw: object, extras: dict[str, object] | None = None) -> ServiceList:
     services: list[Service] = []
     for item in _as_records(raw):
         address = item.get("address")
@@ -184,17 +265,48 @@ def mikrotik_services(raw: object) -> ServiceList:
                 listen=listen,
             )
         )
+    extra = extras or {}
+    for name, key in (
+        ("bandwidth-server", "bandwidth-server"),
+        ("proxy", "proxy"),
+        ("socks", "socks"),
+        ("upnp", "upnp"),
+        ("pptp", "pptp"),
+    ):
+        if key in extra and extra[key] is not None:
+            services.append(_synthetic_service(name, _setting_enabled(extra[key])))
+    if extra.get("cloud") is not None:
+        cloud = _as_record(extra.get("cloud"))
+        services.append(_synthetic_service("cloud-ddns", _as_bool(cloud.get("ddns-enabled"))))
+        services.append(_synthetic_service("cloud-update-time", _as_bool(cloud.get("update-time"))))
     return ServiceList(services=tuple(services))
 
 
-def mikrotik_ntp(raw: object) -> NtpConfig:
+def mikrotik_ntp(raw: object, servers_raw: object | None = None) -> NtpConfig:
     item = _as_record(raw)
-    servers = _servers(item.get("servers")) or _servers(item.get("server"))
-    return NtpConfig(enabled=_as_bool(item.get("enabled"), default=False), servers=servers)
+    servers = list(_servers(item.get("servers")) or _servers(item.get("server")))
+    for rec in _as_records(servers_raw):
+        extra = _servers(rec.get("address") or rec.get("server") or rec.get("name"))
+        for host in extra:
+            if host not in servers:
+                servers.append(host)
+    return NtpConfig(enabled=_as_bool(item.get("enabled"), default=False), servers=tuple(servers))
 
 
 def mikrotik_dns(raw: object) -> DnsConfig:
     return DnsConfig(servers=_servers(_as_record(raw).get("servers")))
+
+
+_PLACEHOLDER_REMOTES = frozenset({"0.0.0.0", "::", "none"})
+
+
+def _remote_host(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    token = str(value).strip()
+    if not token or token.lower() in _PLACEHOLDER_REMOTES or as_any_token(token) == "any":
+        return None
+    return token
 
 
 def mikrotik_logging(logging_raw: object, actions_raw: object) -> LoggingConfig:
@@ -202,8 +314,15 @@ def mikrotik_logging(logging_raw: object, actions_raw: object) -> LoggingConfig:
     actions = _as_records(actions_raw)
     local_names = {"memory", "disk"}
     action_by_name = {str(action.get("name") or ""): action for action in actions}
+    used_actions = {
+        str(rule.get("action") or "").strip().lower()
+        for rule in rules
+        if _enabled(rule) and rule.get("action") not in (None, "")
+    }
     local_enabled = False
     for rule in rules:
+        if not _enabled(rule):
+            continue
         action_name = str(rule.get("action") or "").strip().lower()
         if action_name in local_names:
             local_enabled = True
@@ -214,12 +333,14 @@ def mikrotik_logging(logging_raw: object, actions_raw: object) -> LoggingConfig:
             break
     remotes: list[str] = []
     for action in actions:
+        name = str(action.get("name") or "").strip().lower()
+        if name not in used_actions:
+            continue
         target = str(action.get("target") or "").strip().lower()
-        remote = action.get("remote")
-        has_remote = remote not in (None, "")
-        if target == "remote" or has_remote:
-            token = str(remote).strip() if has_remote else str(action.get("name") or "remote")
-            if token:
+        host = _remote_host(action.get("remote"))
+        if target == "remote" or host:
+            token = host or None
+            if token and token not in remotes:
                 remotes.append(token)
     return LoggingConfig(local_enabled=local_enabled, remote_targets=tuple(remotes))
 
@@ -234,6 +355,9 @@ def mikrotik_snmp(snmp_raw: object, communities_raw: object) -> SnmpConfig:
             SnmpCommunity(
                 name=str(item.get("name") or ""),
                 version="" if version is None else str(version),
+                read_access=(
+                    _as_bool(item.get("read-access"), default=False) if "read-access" in item else None
+                ),
             )
         )
     return SnmpConfig(
@@ -254,17 +378,71 @@ def mikrotik_filter(raw: object) -> PolicyList:
                 src=_address_tokens(item.get("src-address")),
                 dst=_address_tokens(item.get("dst-address")),
                 service=_service_tokens(item),
+                log=_as_bool(item.get("log"), default=False) if "log" in item else False,
+                chain=str(item.get("chain") or "").strip().lower(),
+                connection_state=_csv_tokens(item.get("connection-state")),
+                in_interface=str(item.get("in-interface") or "").strip(),
+                out_interface=str(item.get("out-interface") or "").strip(),
+                in_interface_list=str(item.get("in-interface-list") or "").strip(),
+                out_interface_list=str(item.get("out-interface-list") or "").strip(),
             )
         )
     return PolicyList(policies=tuple(policies))
 
 
-def mikrotik_system(raw: object) -> SystemInfo:
+def _optional_text(item: dict[str, Any], key: str) -> str | None:
+    value = item.get(key)
+    if value in (None, ""):
+        return None
+    return str(value).strip()
+
+
+def mikrotik_system(
+    raw: object,
+    routerboard_raw: object | None = None,
+    update_raw: object | None = None,
+) -> SystemInfo:
     item = _as_record(raw)
     model = item.get("board-name")
+    current = _as_record(routerboard_raw).get("current-firmware")
+    update = _as_record(update_raw)
     return SystemInfo(
         firmware=str(item.get("version") or ""),
         model=None if model in (None, "") else str(model),
+        current_firmware=None if current in (None, "") else str(current).strip(),
+        update_status=_optional_text(update, "status"),
+        installed_version=_optional_text(update, "installed-version"),
+        latest_version=_optional_text(update, "latest-version"),
+    )
+
+
+def _interface_list(raw: object, *keys: str) -> str:
+    item = _as_record(raw)
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def mikrotik_l2_access(
+    discover_raw: object,
+    telnet_raw: object,
+    winbox_raw: object,
+    ping_raw: object,
+) -> L2Access:
+    ping = _as_record(ping_raw)
+    return L2Access(
+        discover_interface_list=_interface_list(
+            discover_raw, "discover-interface-list", "interface-list", "interface"
+        ),
+        mac_telnet_interface_list=_interface_list(
+            telnet_raw, "allowed-interface-list", "interface-list", "interface"
+        ),
+        mac_winbox_interface_list=_interface_list(
+            winbox_raw, "allowed-interface-list", "interface-list", "interface"
+        ),
+        mac_ping_enabled=_as_bool(ping.get("enabled"), default=True) if ping else True,
     )
 
 
@@ -287,17 +465,49 @@ class MikrotikAdapter:
             elif capability == "admin_settings":
                 identity = self._get("/rest/system/identity", capability=capability)
                 settings = self._get("/rest/user/settings", capability=capability)
+                clock = self._get("/rest/system/clock", capability=capability)
+                services = self._get("/rest/ip/service", capability=capability)
+                ssh = self._get_optional("/rest/ip/ssh", capability=capability)
                 raw = {
                     "/rest/system/identity": identity,
                     "/rest/user/settings": settings,
+                    "/rest/system/clock": clock,
+                    "/rest/ip/service": services,
+                    "/rest/ip/ssh": ssh,
                 }
-                payload = mikrotik_admin_settings(identity, settings)
+                payload = mikrotik_admin_settings(identity, settings, clock, services, ssh)
             elif capability == "services":
-                raw = self._get("/rest/ip/service", capability=capability)
-                payload = mikrotik_services(raw)
+                ip_service = self._get("/rest/ip/service", capability=capability)
+                extras = {
+                    "bandwidth-server": self._get_optional(
+                        "/rest/tool/bandwidth-server", capability=capability
+                    ),
+                    "proxy": self._get_optional("/rest/ip/proxy", capability=capability),
+                    "socks": self._get_optional("/rest/ip/socks", capability=capability),
+                    "upnp": self._get_optional("/rest/ip/upnp", capability=capability),
+                    "cloud": self._get_optional("/rest/ip/cloud", capability=capability),
+                    "pptp": self._get_optional(
+                        "/rest/interface/pptp-server/server", capability=capability
+                    ),
+                }
+                raw = {
+                    "/rest/ip/service": ip_service,
+                    "/rest/tool/bandwidth-server": extras["bandwidth-server"],
+                    "/rest/ip/proxy": extras["proxy"],
+                    "/rest/ip/socks": extras["socks"],
+                    "/rest/ip/upnp": extras["upnp"],
+                    "/rest/ip/cloud": extras["cloud"],
+                    "/rest/interface/pptp-server/server": extras["pptp"],
+                }
+                payload = mikrotik_services(ip_service, extras)
             elif capability == "ntp":
-                raw = self._get("/rest/system/ntp/client", capability=capability)
-                payload = mikrotik_ntp(raw)
+                client = self._get("/rest/system/ntp/client", capability=capability)
+                servers = self._get_optional("/rest/system/ntp/client/servers", capability=capability)
+                raw = {
+                    "/rest/system/ntp/client": client,
+                    "/rest/system/ntp/client/servers": servers,
+                }
+                payload = mikrotik_ntp(client, servers)
             elif capability == "dns":
                 raw = self._get("/rest/ip/dns", capability=capability)
                 payload = mikrotik_dns(raw)
@@ -318,8 +528,29 @@ class MikrotikAdapter:
                 raw = self._get("/rest/ip/firewall/filter", capability=capability)
                 payload = mikrotik_filter(raw)
             elif capability == "system_info":
-                raw = self._get("/rest/system/resource", capability=capability)
-                payload = mikrotik_system(raw)
+                resource = self._get("/rest/system/resource", capability=capability)
+                routerboard = self._get_optional("/rest/system/routerboard", capability=capability)
+                update = self._get_optional("/rest/system/package/update", capability=capability)
+                raw = {
+                    "/rest/system/resource": resource,
+                    "/rest/system/routerboard": routerboard,
+                    "/rest/system/package/update": update,
+                }
+                payload = mikrotik_system(resource, routerboard, update)
+            elif capability == "l2_access":
+                discover = self._get(
+                    "/rest/ip/neighbor/discovery-settings", capability=capability
+                )
+                mac = self._get("/rest/tool/mac-server", capability=capability)
+                winbox = self._get("/rest/tool/mac-server/mac-winbox", capability=capability)
+                ping = self._get("/rest/tool/mac-server/ping", capability=capability)
+                raw = {
+                    "/rest/ip/neighbor/discovery-settings": discover,
+                    "/rest/tool/mac-server": mac,
+                    "/rest/tool/mac-server/mac-winbox": winbox,
+                    "/rest/tool/mac-server/ping": ping,
+                }
+                payload = mikrotik_l2_access(discover, mac, winbox, ping)
             else:
                 raise CollectError(capability, "", None, f"unknown capability: {capability}")
         except CollectError:
@@ -337,7 +568,7 @@ class MikrotikAdapter:
         )
 
     def implemented(self) -> frozenset[str]:
-        return frozenset(CORE_CAPABILITIES)
+        return frozenset(CORE_CAPABILITIES + MIKROTIK_EXTRAS)
 
     def close(self) -> None:
         self._client.close()
@@ -383,6 +614,22 @@ class MikrotikAdapter:
             )
         return _decode_json(response, path, capability)
 
+    def _get_optional(self, path: str, *, capability: str) -> object | None:
+        try:
+            response = self._request("GET", path)
+        except httpx.RequestError as exc:
+            _raise_http(path, None, str(exc), capability)
+        if response.status_code == 404:
+            return None
+        if not 200 <= response.status_code < 300:
+            _raise_http(
+                path,
+                response.status_code,
+                f"GET {path} returned {response.status_code}",
+                capability,
+            )
+        return _decode_json(response, path, capability)
+
 
 def _decode_json(response: httpx.Response, path: str, capability: str | None) -> object:
     try:
@@ -418,6 +665,7 @@ __all__ = [
     "mikrotik_admin_settings",
     "mikrotik_dns",
     "mikrotik_filter",
+    "mikrotik_l2_access",
     "mikrotik_logging",
     "mikrotik_ntp",
     "mikrotik_services",

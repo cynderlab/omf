@@ -64,6 +64,26 @@ def services_not_unrestricted(
     )
 
 
+def named_services_disabled(
+    evidence: Mapping[str, Evidence],
+    params: dict,
+    vendor: str,
+) -> CheckResult:
+    payload: ServiceList = evidence["services"].payload
+    names = {str(n).lower() for n in params.get("names", ())}
+    hits = [s.name for s in payload.services if s.enabled and s.name.lower() in names]
+    return CheckResult(
+        check_id="",
+        status="fail" if hits else "pass",
+        severity="medium",
+        diagnostic=(
+            f"enabled extra services {hits!r}" if hits else "named extra services are disabled"
+        ),
+        capability_refs=("services",),
+        observed={"names": hits},
+    )
+
+
 def wan_mgmt_disabled(evidence, params, vendor) -> CheckResult:
     payload = evidence["services"].payload
     names = {n.lower() for n in params.get("wan_mgmt", ())}
