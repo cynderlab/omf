@@ -11,9 +11,9 @@
 
 **Beta.** Read-only multi-vendor firewall audit for a consultant auditor.
 
-Connect once. Collect evidence. Evaluate a fixed baseline. Write Markdown under `./audits/`.
+Connect once. Collect evidence. Evaluate a fixed baseline. An optional **AI analysis agent** ([Pydantic AI](https://ai.pydantic.dev/)) writes the Markdown narrative from redacted findings only. Output lands under `./audits/`.
 
-The brand is transparency: you see every step. The model never sees secrets or identifiers.
+The brand is transparency: you see every step. The model never chooses checks, and never sees secrets or identifiers.
 
 | | |
 |---|---|
@@ -25,9 +25,9 @@ The brand is transparency: you see every step. The model never sees secrets or i
 
 ## What it does
 
-OMF is a **read-only** REST auditor. It does **not** SSH, does not change device config, and does not pick checks with an LLM. The runner plans from a YAML catalog, collects each capability once, evaluates pure functions, then (optionally) asks a model to write the narrative from **redacted** findings only.
+OMF is a **read-only** REST auditor with a two-step brain. A deterministic runner plans from a YAML catalog, collects each capability once, and evaluates pure functions — no LLM in that path. Then an optional **AI analysis agent** (Pydantic AI) writes the report narrative from **redacted** findings only: summary, why each fail matters, catalog mitigations.
 
-If the LLM is missing or fails, you still get collect + evaluate + a deterministic skeleton report.
+It does **not** SSH, does not change device config, and does not let the model pick checks or talk to the firewall. If the agent is missing or fails, you still get collect + evaluate + a deterministic skeleton report.
 
 This is **beta** software. Treat findings as a starting point for the auditor, not a finished certification.
 
@@ -86,7 +86,21 @@ Tests (no live firewall):
 uv run pytest
 ```
 
-## Optional LLM (narrative)
+## AI analysis agent
+
+The findings are **not** chosen by a model. A deterministic runner collects evidence and evaluates the catalog. After that, an optional **analysis agent** ([Pydantic AI](https://ai.pydantic.dev/)) writes the Markdown narrative: executive summary, why each fail matters, and catalog mitigations bound to redacted evidence.
+
+The agent is a guest in the pipeline. It has no adapter, no session, and no `token_map`. Its only tools are:
+
+| Tool | Returns |
+|---|---|
+| `list_findings` | Check id, status, severity, title |
+| `get_finding` | One redacted finding (diagnostic + observed) |
+| `get_redacted_evidence` | One redacted capability payload |
+| `get_mitigation` | Catalog mitigation text for that check |
+| `submit_report` | Accepts the Markdown **body** (no title header) |
+
+It must not invent vendor CLI beyond that mitigation text. After `submit_report`, OMF prepends vendor / URL-from-RAM / timestamp locally and destokenizes. If the agent is unconfigured or fails (one retry), you still get collect + evaluate + a skeleton report (`Narrative skipped` + table + verbatim catalog mitigations).
 
 Collect and evaluate work without a model. For a written report, set these in `./.env` or `~/.config/omf/.env`:
 
@@ -97,9 +111,7 @@ OMF_LLM_MODEL=
 OMF_LLM_API_STYLE=openai    # or anthropic
 ```
 
-`./omf doctor` **warns** (exit 0) if LLM env is missing. One LLM retry, then the skeleton report.
-
-The model sees only redacted findings, redacted evidence, and catalog mitigations. It never sees `raw/`, `token_map.json`, credentials, or the target URL.
+`./omf doctor` **warns** (exit 0) if LLM env is missing. OpenAI-compatible and Anthropic-style endpoints are supported. The model never sees `raw/`, `token_map.json`, credentials, or the target URL.
 
 ## What you get
 
