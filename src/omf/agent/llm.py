@@ -12,6 +12,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from omf.agent.report import copy_for
 from omf.agent.tools import AnalysisContext, make_tools
 from omf.agent.trace import format_transcript, instrumentation_settings
 from omf.config import LlmSettings
@@ -24,13 +25,43 @@ Use only tool data. Adapt catalog mitigations to the redacted evidence.
 Do not invent vendor CLI or API beyond that mitigation text.
 State that mitigations are examples and the auditor owns any change.
 Do not ask for credentials. Do not guess hidden IPs, hostnames, or URLs.
-Call submit_report with the full markdown body (no title header)."""
+Do not write a title or metadata block (author, date, firewall, tool). Those are prepended locally.
+
+Call submit_report with the markdown body in this exact shape:
+
+## {exec}
+
+<one short paragraph: scope, fail/pass/error/skipped counts, main risks>
+
+| id | severity | title |
+| --- | --- | --- |
+<one row per fail finding only; title in the report language>
+
+## {vulns}
+
+### <check_id> — <title in the report language>
+**Severity:** <info|low|medium|high>
+**Description:** <what is wrong and why it matters>
+**Evidence:** <redacted facts from tools>
+**Mitigation:** <catalog text, adapted to this evidence>
+
+Rules:
+- Vulnerabilities section: fail findings only, highest severity first.
+- Do not write sections for pass, error, or skipped.
+- Every fail from list_findings must appear in the table and as a vulnerability."""
 
 _USER_PROMPT = "Write the firewall audit report using only the tools."
 
 
 class LlmNotConfigured(Exception):
     pass
+
+
+def _prompt_for(language: str) -> str:
+    copy = copy_for(language)
+    return _SYSTEM_PROMPT.format(
+        language=language, exec=copy["exec"], vulns=copy["vulns"]
+    )
 
 
 def _model_for(settings: LlmSettings):
@@ -53,7 +84,7 @@ def build_agent(
 ) -> Agent:
     return Agent(
         _model_for(settings),
-        system_prompt=_SYSTEM_PROMPT.format(language=ctx.language),
+        system_prompt=_prompt_for(ctx.language),
         tools=make_tools(ctx, on_tool=on_tool),
         name="omf_analysis",
     )

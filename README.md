@@ -100,7 +100,7 @@ The agent is a guest in the pipeline. It has no adapter, no session, and no `tok
 | `get_mitigation` | Catalog mitigation text for that check |
 | `submit_report` | Accepts the Markdown **body** (no title header) |
 
-It must not invent vendor CLI beyond that mitigation text. After `submit_report`, OMF prepends vendor / URL-from-RAM / timestamp locally and destokenizes. If the agent is unconfigured or fails (one retry), you still get collect + evaluate + a skeleton report (`Narrative skipped` + table + verbatim catalog mitigations).
+It must not invent vendor CLI beyond that mitigation text. After `submit_report`, OMF prepends title and metadata (author, date, firewall URL-from-RAM, tool) locally and destokenizes. If the agent is unconfigured or fails (one retry), you still get collect + evaluate + a skeleton report (`Narrative skipped` + fail-only table + verbatim catalog mitigations).
 
 Collect and evaluate work without a model. For a written report, set these in `./.env` or `~/.config/omf/.env`:
 

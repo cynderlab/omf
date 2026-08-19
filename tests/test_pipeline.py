@@ -50,6 +50,9 @@ def test_pipeline_skeleton_report_and_no_secrets_on_disk(tmp_path: Path):
     report = run_audit(session, store, FullFake(), llm, events.append)
     text = report.read_text()
     assert "Narrative skipped" in text
+    assert "Informe d'auditoria de tallafoc" in text
+    assert "Author: OH MY FIREWALL" in text
+    assert "## Vulnerabilitats" in text
     assert "https://192.0.2.8" in text
     assert "FW-ADM-001" in text
     disk = "\n".join(p.read_text() for p in store.path.rglob("*") if p.is_file() and p.name != "report.md")

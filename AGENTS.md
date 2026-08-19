@@ -101,7 +101,7 @@ report.md                    # local header (includes URL) + destokenized body
 
 Statuses: `pass` / `fail` / `error` / `skipped`. ERROR is a collect/parse/evaluator exception, not a security fail. SKIPPED means `applies_to` excludes the vendor or a needed capability is unimplemented.
 
-LLM fail: **one retry**, then deterministic skeleton (`Narrative skipped` + table + verbatim catalog mitigations). Do not reconnect to the firewall.
+LLM fail: **one retry**, then deterministic skeleton (`Narrative skipped` + fail-only table + title / severity / description / evidence / mitigation). Do not reconnect to the firewall.
 
 Log lines: `[collect] GET /rest/user 200 84ms` — method, **path only**, status, duration. Also `[eval]`, `[redact]`, `[llm] <tool_name>`. Never print password, token, API key, or `Authorization`.
 
@@ -166,7 +166,7 @@ After the model returns Markdown, destokenize with the local map. The model only
 
 Pydantic AI. Tools: `list_findings`, `get_finding`, `get_redacted_evidence`, `get_mitigation`, `submit_report`. No collect, no network, no session, no `token_map`.
 
-`submit_report` accepts the Markdown **body** (no title header). `finalize_report` prepends vendor / URL-from-RAM / timestamp / version, then destokenizes.
+`submit_report` accepts the Markdown **body** (no title header): executive summary, fail-only table, then one vulnerability block per fail (`title`, `severity`, `description`, `evidence`, `mitigation`). `finalize_report` prepends localized title plus Author / Date / Firewall (vendor · URL-from-RAM) / Tool, then destokenizes.
 
 Keep `tests/test_llm_boundary.py` true: request/tool payloads contain no URL, password, key, `raw`, or `token_map`. `build_agent` must not hang session or `token_map` on the agent.
 

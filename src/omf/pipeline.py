@@ -92,6 +92,7 @@ def run_audit(
             url=session.url,
             started_at=started_at,
             version=__version__,
+            language=session.report_language,
         )
         store.write_report(report)
         _log.info("report written")
@@ -121,7 +122,9 @@ def _analysis_body(
             "status": "skipped",
             "detail": "LLM not configured",
         })
-        return skeleton_body(findings, checks, session.vendor)
+        return skeleton_body(
+            findings, checks, session.vendor, language=session.report_language
+        )
     ctx = AnalysisContext(
         findings=[item for item in redacted_findings if isinstance(item, dict)],
         evidence=redacted_evidence,
@@ -154,7 +157,9 @@ def _analysis_body(
             "model": model,
             "detail": _safe_exc_detail(exc, llm.api_key),
         })
-        return skeleton_body(findings, checks, session.vendor)
+        return skeleton_body(
+            findings, checks, session.vendor, language=session.report_language
+        )
 
 
 def _safe_exc_detail(exc: BaseException, secret: str | None) -> str:

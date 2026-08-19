@@ -102,7 +102,7 @@ def make_tools(
         return get_mitigation(ctx, check_id)
 
     def submit_report_bound(markdown: str) -> str:
-        """Submit the full markdown report body with no title header."""
+        """Submit the markdown body: executive summary, fail table, vulnerabilities."""
         _notify_tool(on_tool, "submit_report")
         return submit_report(ctx, markdown)
 
