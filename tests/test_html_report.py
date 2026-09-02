@@ -1,4 +1,11 @@
-from omf.agent.html import ReportStats, summarize, status_donut_svg, severity_bars_svg
+from omf.agent.html import (
+    ReportStats,
+    summarize,
+    posture_strip,
+    severity_chips,
+    status_donut_svg,
+    severity_bars_svg,
+)
 from omf.schema.evidence import CheckResult
 
 
@@ -35,6 +42,34 @@ def test_summarize_empty():
     assert stats.fail_by_severity == {"high": 0, "medium": 0, "low": 0, "info": 0}
 
 
+def test_posture_strip_has_no_script_and_encodes_counts():
+    stats = ReportStats(
+        total=2,
+        by_status={"pass": 1, "fail": 1, "error": 0, "skipped": 0},
+        fail_by_severity={"high": 1, "medium": 0, "low": 0, "info": 0},
+    )
+    copy = {"status": "Status", "pass": "Pass", "fail": "Fail", "error": "Error", "skipped": "Skipped"}
+    html = posture_strip(stats, copy)
+    assert 'class="posture"' in html
+    assert "<script" not in html.lower()
+    assert "<svg" not in html.lower()
+    assert "posture-fail" in html and "posture-pass" in html
+    assert "50.000%" in html
+
+
+def test_severity_chips_include_zero_buckets():
+    stats = ReportStats(
+        total=1,
+        by_status={"pass": 0, "fail": 1, "error": 0, "skipped": 0},
+        fail_by_severity={"high": 1, "medium": 0, "low": 0, "info": 0},
+    )
+    html = severity_chips(stats, {"severity": "Severity"})
+    assert 'class="sev-chips"' in html
+    assert "<script" not in html.lower()
+    assert "high" in html and "medium" in html and "low" in html and "info" in html
+    assert "chip-high" in html
+
+
 def test_donut_svg_has_no_script_and_encodes_counts():
     stats = ReportStats(
         total=2,
@@ -43,7 +78,7 @@ def test_donut_svg_has_no_script_and_encodes_counts():
     )
     copy = {"status": "Status", "pass": "Pass", "fail": "Fail", "error": "Error", "skipped": "Skipped"}
     svg = status_donut_svg(stats, copy)
-    assert svg.strip().startswith("<svg")
+    assert "<svg" in svg
     assert "<script" not in svg.lower()
     assert "Pass" in svg and "Fail" in svg
     assert "1" in svg
@@ -56,7 +91,7 @@ def test_severity_bars_include_zero_buckets():
         fail_by_severity={"high": 1, "medium": 0, "low": 0, "info": 0},
     )
     svg = severity_bars_svg(stats, {"severity": "Severity"})
-    assert svg.strip().startswith("<svg")
+    assert "<svg" in svg
     assert "<script" not in svg.lower()
     assert "high" in svg and "medium" in svg and "low" in svg and "info" in svg
 
@@ -222,11 +257,14 @@ def test_wrap_html_inserts_dashboard_after_exec_heading(monkeypatch):
     html = _wrap()
     assert html.strip().startswith("<!DOCTYPE html>")
     assert 'lang="en"' in html
-    assert "<h1>Configuration audit report</h1>" in html
-    assert "Author: alice" in html
+    assert "<h1>Security baseline report</h1>" in html
+    assert 'class="appbar"' in html
+    assert 'class="mark"' not in html
+    assert "Author" in html and "alice" in html
     assert "OH MY FORTRESS" not in html
-    assert "Date: 2026-08-18" in html
-    assert "Target: mikrotik \u00b7 https://192.0.2.1" in html
+    assert "OMF" in html
+    assert "2026-08-18" in html
+    assert "mikrotik" in html and "https://192.0.2.1" in html
     assert html.count("https://192.0.2.1") == 1
     assert "<script" not in html.lower()
     assert "cdn" not in html.lower()
@@ -237,14 +275,24 @@ def test_wrap_html_inserts_dashboard_after_exec_heading(monkeypatch):
     assert i_h2 < i_kpi < i_para
     assert "Pass" in html and ">1<" in html or "1" in html
     assert "Fail" in html
+    assert 'class="posture"' in html
+    assert 'class="charts"' in html
+    assert 'class="chart-status"' in html
+    assert "<svg" in html
+    assert 'class="sev-chips"' in html
+    assert ".chart-status svg" in html
+    assert "min-height: 22rem" not in html
+    assert "min-height: 16rem" not in html
     # counts from findings, not from the lying paragraph
     assert "zero problems" in html
 
 
-def test_wrap_html_uses_jetbrains_mono_and_no_cdn(monkeypatch):
+def test_wrap_html_uses_system_sans_and_no_cdn(monkeypatch):
     monkeypatch.setattr("omf.agent.html.operator_username", lambda: "alice")
     html = _wrap()
-    assert "JetBrains Mono" in html
+    assert "Google Sans" in html
+    assert "Roboto" in html
+    assert "Roboto Mono" in html
     assert "cdn" not in html.lower()
     assert "fonts.googleapis" not in html.lower()
     assert 'src="' not in html
@@ -255,16 +303,22 @@ def test_wrap_html_puts_disclaimer_before_author(monkeypatch):
     html = _wrap()
     i_h1 = html.index("<h1>")
     i_disc = html.index(_DISCLAIMER)
-    i_author = html.index("Author: alice")
+    i_author = html.index("alice")
     i_h2 = html.index("<h2>")
-    assert i_h1 < i_disc < i_author < i_h2
+    i_identity = html.index('class="identity"')
+    i_notice = html.index('class="notice"')
+    assert i_h1 < i_identity < i_author < i_notice < i_disc < i_h2
+    assert 'class="meta-v"' in html
+    assert ".meta li" in html
+    assert "⚠" in html
+    assert "</div>" in html[i_identity:i_notice]
 
 
 def test_wrap_html_escapes_operator_username(monkeypatch):
     monkeypatch.setattr("omf.agent.html.operator_username", lambda: "a<b")
     html = _wrap()
-    assert "Author: a&lt;b" in html
-    assert "Author: a<b" not in html
+    assert "a&lt;b" in html
+    assert "a<b" not in html
 
 
 def test_operator_username_uses_getuser(monkeypatch):
@@ -299,10 +353,11 @@ def test_html_report_css_colors_severity_cells(monkeypatch):
         findings=[_finding("FW-ADM-001", "fail", "high")],
     )
     assert '<td class="sev-high">high</td>' in html
-    assert ".sev-high { color: #b42318; font-weight: 650; }" in html
-    assert ".sev-medium { color: #dc6803; font-weight: 650; }" in html
-    assert ".sev-low { color: #ca8a04; font-weight: 650; }" in html
-    assert ".sev-info { color: #667085; font-weight: 400; }" in html
+    assert "#d93025" in html
+    assert "#e37400" in html
+    assert "#f9ab00" in html
+    assert "#1a73e8" in html
+    assert "#b42318" not in html
 
 
 def test_wrap_html_table_headers_and_overflow_css(monkeypatch):
@@ -313,13 +368,12 @@ def test_wrap_html_table_headers_and_overflow_css(monkeypatch):
         "| --- | --- | --- | --- | --- | --- |\n"
         "| 1 | any | any | any | accept | long |\n"
     )
-    body = html.split("<main>", 1)[1]
+    body = html.split("<main", 1)[1]
     assert 'class="table-wrap"' in body
     assert "<th>id</th>" in body
     assert ".table-wrap" in html
-    assert "white-space: nowrap" in html
     assert "overflow-x: auto" in html
-    assert "main h3" in html
+    assert "article.finding" in html
     assert "a.jump" in html
     assert "scroll-margin-top" in html
 
@@ -335,7 +389,7 @@ def test_wrap_html_catalan_kpi_labels():
         findings=[_finding("FW-ADM-001", "fail", "high")],
     )
     assert 'lang="ca"' in html
-    assert "<h1>Informe d'auditoria de configuració</h1>" in html or "<h1>Informe d&#x27;auditoria de configuració</h1>" in html or "Informe d" in html
+    assert "<h1>Informe de línia base de seguretat</h1>" in html
     assert "Fallades" in html
     assert "Correctes" in html
     assert "comprovacions" in html
@@ -354,4 +408,24 @@ def test_wrap_html_renders_fenced_code_and_includes_pre_css():
     assert "pre {" in html
     assert "<pre>" in html
     assert "set foo" in html
-    assert "```" not in html.split("<main>", 1)[1]
+    assert "```" not in html.split("<main", 1)[1]
+
+
+def test_wrap_html_findings_become_articles(monkeypatch):
+    monkeypatch.setattr("omf.agent.html.operator_username", lambda: "alice")
+    html = _wrap(
+        "## Executive summary\n\n"
+        "Scope.\n\n"
+        "### FW-ADM-001 — Default admin\n\n"
+        "- **Severity:** high\n"
+        "- **Description:** bad\n",
+        findings=[_finding("FW-ADM-001", "fail", "high")],
+    )
+    assert '<article class="finding sev-high"' in html
+    assert 'id="FW-ADM-001"' in html
+    assert "chip-high" in html
+    assert html.count('id="FW-ADM-001"') == 1
+    assert "<script" not in html.lower()
+    assert "<li><strong>Severity:</strong> high</li>" not in html
+    assert "td.sev-high { color" in html
+    assert "article.finding.sev-high { color" not in html

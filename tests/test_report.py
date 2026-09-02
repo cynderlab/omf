@@ -55,13 +55,13 @@ def test_wrap_inserts_localized_header_with_author_date_target():
     )
     assert html.strip().startswith("<!DOCTYPE html>")
     assert "Informe d" in html  # title; apostrophe may be escaped
-    assert "Author:" in html
-    assert "Author: OH MY FORTRESS" not in html
+    assert "Autor" in html
+    assert "OH MY FORTRESS" not in html
     assert "This was a read-only assessment" in html
-    assert html.index("This was a read-only assessment") < html.index("Author:")
-    assert "Date: 2026-08-18" in html
-    assert "Target: mikrotik \u00b7 https://192.0.2.1" in html
-    assert "Tool: OMF 0.1.0" in html
+    assert html.index("Autor") < html.index("This was a read-only assessment")
+    assert "2026-08-18" in html
+    assert "mikrotik" in html and "https://192.0.2.1" in html
+    assert "OMF 0.1.0" in html
     assert html.count("https://192.0.2.1") == 1
     assert "BODY" in html
 
@@ -76,8 +76,9 @@ def test_wrap_english_title():
         language="en",
         findings=[],
     )
-    assert "<h1>Configuration audit report</h1>" in html
-    assert "Target: fortinet \u00b7 https://fw" in html
+    assert "<h1>Security baseline report</h1>" in html
+    assert "fortinet" in html and "https://fw" in html
+    assert html.count("https://fw") == 1
 
 
 def _low_license_fail():
@@ -124,24 +125,24 @@ def test_narrative_body_includes_low_license_fail():
 
 
 def test_skeleton_is_exec_summary_and_fail_only_vulnerabilities():
-    checks = load_catalog()
+    checks = load_catalog("mikrotik")
     body = skeleton_body(_findings(), checks, "mikrotik", language="ca")
     exec_part, _, vuln_part = body.partition("## Vulnerabilitats")
     assert "## Resum executiu" in exec_part
     assert "Narrative skipped" in exec_part
-    assert "| id | severity | title |" in exec_part
+    assert "| id | Severitat | títol |" in exec_part
     assert "| FW-ADM-001 | high |" in exec_part
     assert "FW-SYS-001" not in exec_part
     assert "FW-NTP-001" not in exec_part
     assert "### FW-ADM-001" in vuln_part
-    assert "- **Severity:** high" in vuln_part
-    desc_line = next(line for line in vuln_part.splitlines() if line.startswith("- **Description:**"))
-    assert desc_line != "- **Description:** enabled user matches vendor default name 'admin'"
+    assert "- **Severitat:** high" in vuln_part
+    desc_line = next(line for line in vuln_part.splitlines() if line.startswith("- **Descripció:**"))
+    assert desc_line != "- **Descripció:** enabled user matches vendor default name 'admin'"
     assert "admin" in desc_line.lower()
     assert "| field | value |" in vuln_part
     assert "| names | admin |" in vuln_part
     assert "names=['admin']" not in vuln_part
-    assert "- **Mitigation:**" in vuln_part
+    assert "- **Exemple de mitigació:**" in vuln_part
     assert "/user" in vuln_part
     assert "### FW-SYS-001" not in vuln_part
     assert "### FW-NTP-001" not in vuln_part
@@ -214,7 +215,7 @@ def test_skeleton_fences_catalog_cli():
         observed={"versions": ["tlsv1-2", "tlsv1-3"]},
     )
     body = skeleton_body([finding], load_catalog("fortinet"), "fortinet", language="en")
-    mit_line = next(line for line in body.splitlines() if line.startswith("- **Mitigation:**"))
+    mit_line = next(line for line in body.splitlines() if line.startswith("- **Example mitigation:**"))
     assert "config " not in mit_line
     assert "```" in body
     fence = body.split("```", 2)[1]
@@ -305,13 +306,13 @@ def test_narrative_body_uses_model_prose_and_local_evidence():
             )
         ],
     )
-    body = narrative_body(narrative, _findings(), load_catalog(), "mikrotik", language="ca")
+    body = narrative_body(narrative, _findings(), load_catalog("mikrotik"), "mikrotik", language="ca")
     assert "## Resum executiu" in body
     assert "Scope: 1 fail." in body
     assert "Compte admin per defecte" in body
     assert "L'usuari admin de fàbrica segueix habilitat." in body
     assert "| names | admin |" in body
-    assert "- **Mitigation:**" in body
+    assert "- **Exemple de mitigació:**" in body
     assert "/user" in body
     assert "### FW-SYS-001" not in body
 

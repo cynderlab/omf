@@ -17,7 +17,7 @@ _STATUS_ORDER = ("fail", "error", "skipped", "pass")
 _SEV_ORDER = {"high": 0, "medium": 1, "low": 2, "info": 3}
 _COPY = {
     "ca": {
-        "title": "Informe d'auditoria de configuració",
+        "title": "Informe de línia base de seguretat",
         "exec": "Resum executiu",
         "vulns": "Vulnerabilitats",
         "pass": "Correctes",
@@ -27,9 +27,18 @@ _COPY = {
         "checks": "comprovacions",
         "status": "Estat",
         "severity": "Severitat",
+        "author": "Autor",
+        "date": "Data",
+        "target": "Objectiu",
+        "tool": "Eina",
+        "evidence": "Evidència",
+        "mitigation": "Exemple de mitigació",
+        "description": "Descripció",
+        "id": "id",
+        "title_col": "títol",
     },
     "es": {
-        "title": "Informe de auditoría de configuración",
+        "title": "Informe de línea base de seguridad",
         "exec": "Resumen ejecutivo",
         "vulns": "Vulnerabilidades",
         "pass": "Correctos",
@@ -39,9 +48,18 @@ _COPY = {
         "checks": "comprobaciones",
         "status": "Estado",
         "severity": "Severidad",
+        "author": "Autor",
+        "date": "Fecha",
+        "target": "Objetivo",
+        "tool": "Herramienta",
+        "evidence": "Evidencia",
+        "mitigation": "Ejemplo de mitigación",
+        "description": "Descripción",
+        "id": "id",
+        "title_col": "título",
     },
     "en": {
-        "title": "Configuration audit report",
+        "title": "Security baseline report",
         "exec": "Executive summary",
         "vulns": "Vulnerabilities",
         "pass": "Pass",
@@ -51,6 +69,15 @@ _COPY = {
         "checks": "checks",
         "status": "Status",
         "severity": "Severity",
+        "author": "Author",
+        "date": "Date",
+        "target": "Target",
+        "tool": "Tool",
+        "evidence": "Evidence",
+        "mitigation": "Example mitigation",
+        "description": "Description",
+        "id": "ID",
+        "title_col": "Title",
     },
 }
 
@@ -142,10 +169,11 @@ def _dict_rows_table(rows: list[dict]) -> list[str]:
     )
 
 
-def _format_evidence(observed: dict) -> list[str]:
+def _format_evidence(observed: dict, copy: dict[str, str]) -> list[str]:
+    label = copy["evidence"]
     if not observed:
-        return ["- **Evidence:** —"]
-    out = ["- **Evidence:**", ""]
+        return [f"- **{label}:** —"]
+    out = [f"- **{label}:**", ""]
     scalars: list[tuple[str, object]] = []
 
     def flush_scalars() -> None:
@@ -177,13 +205,13 @@ def _format_evidence(observed: dict) -> list[str]:
     return out
 
 
-def _format_mitigation(text: str) -> list[str]:
+def _format_mitigation(text: str, copy: dict[str, str]) -> list[str]:
     lines = text.strip().splitlines()
     if not lines:
         return []
     prose = lines[0].strip()
     rest = [line.rstrip() for line in lines[1:] if line.strip()]
-    out = [f"- **Mitigation:** {prose}"]
+    out = [f"- **{copy['mitigation']}:** {prose}"]
     if rest:
         out.extend(["", "```", *rest, "```"])
     return out
@@ -192,10 +220,11 @@ def _format_mitigation(text: str) -> list[str]:
 def _fail_table(
     fails: list[CheckResult],
     by_id: dict[str, CheckDef],
+    copy: dict[str, str],
     titles: dict[str, str] | None = None,
 ) -> list[str]:
     rows = [
-        "| id | severity | title |",
+        f"| {copy['id']} | {copy['severity']} | {copy['title_col']} |",
         "| --- | --- | --- |",
     ]
     overlay = titles or {}
@@ -223,9 +252,10 @@ def skeleton_body(
         f"## {copy['exec']}",
         "",
         "Narrative skipped",
+        "",
         counts_line,
         "",
-        *_fail_table(fails, by_id),
+        *_fail_table(fails, by_id, copy),
         "",
         f"## {copy['vulns']}",
         "",
@@ -235,16 +265,16 @@ def skeleton_body(
         title = check.title if check else ""
         parts.append(f"### {finding.check_id} — {title}")
         parts.append("")
-        parts.append(f"- **Severity:** {finding.severity}")
+        parts.append(f"- **{copy['severity']}:** {finding.severity}")
         desc = (
             check.description.strip()
             if check is not None and check.description.strip()
             else finding.diagnostic
         )
-        parts.append(f"- **Description:** {desc}")
-        parts.extend(_format_evidence(finding.observed))
+        parts.append(f"- **{copy['description']}:** {desc}")
+        parts.extend(_format_evidence(finding.observed, copy))
         if check is not None:
-            parts.extend(_format_mitigation(mitigation_for(check, vendor)))
+            parts.extend(_format_mitigation(mitigation_for(check, vendor), copy))
         parts.append("")
     return "\n".join(parts) + "\n"
 
@@ -293,7 +323,7 @@ def narrative_body(
         "",
         narrative.executive_summary.strip(),
         "",
-        *_fail_table(fails, by_id, titles),
+        *_fail_table(fails, by_id, copy, titles),
         "",
         f"## {copy['vulns']}",
         "",
@@ -303,11 +333,11 @@ def narrative_body(
         narr = by_narr.get(finding.check_id)
         parts.append(f"### {finding.check_id} — {_vuln_title(finding, check, narr)}")
         parts.append("")
-        parts.append(f"- **Severity:** {finding.severity}")
-        parts.append(f"- **Description:** {_vuln_description(finding, check, narr)}")
-        parts.extend(_format_evidence(finding.observed))
+        parts.append(f"- **{copy['severity']}:** {finding.severity}")
+        parts.append(f"- **{copy['description']}:** {_vuln_description(finding, check, narr)}")
+        parts.extend(_format_evidence(finding.observed, copy))
         if check is not None:
-            parts.extend(_format_mitigation(mitigation_for(check, vendor)))
+            parts.extend(_format_mitigation(mitigation_for(check, vendor), copy))
         parts.append("")
     return "\n".join(parts) + "\n"
 

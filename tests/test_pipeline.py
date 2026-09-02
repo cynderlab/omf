@@ -71,10 +71,10 @@ def test_pipeline_skeleton_report_and_no_secrets_on_disk(tmp_path: Path):
     assert text.strip().startswith("<!DOCTYPE html>")
     assert "Narrative skipped" in text
     assert "Informe d" in text
-    assert "Author:" in text
-    assert "Author: OH MY FORTRESS" not in text
+    assert "Autor" in text
+    assert "OH MY FORTRESS" not in text
     assert "This was a read-only assessment" in text
-    assert text.index("This was a read-only assessment") < text.index("Author:")
+    assert text.index("Autor") < text.index("This was a read-only assessment")
     assert "Vulnerabilitats" in text
     assert "<h2>" in text
     assert "## Vulnerabilitats" not in text
@@ -179,7 +179,7 @@ def test_skip_llm_with_configured_model_does_not_call_analysis(tmp_path: Path, m
     assert any(e.get("phase") == "eval" for e in events)
     skip = [e for e in events if e.get("phase") == "llm" and e.get("status") == "skipped"]
     assert skip and skip[0].get("detail") == "evaluation only"
-    assert "Configuration audit report" in text
+    assert "Security baseline report" in text
     assert "Executive summary" in text
     assert "Vulnerabilities" in text
     assert "Vulnerabilitats" not in text
@@ -202,7 +202,7 @@ def test_skip_llm_without_llm_env_still_collects_and_evaluates(tmp_path: Path, m
     assert report == store.path / "report.html"
     text = report.read_text()
     assert "Narrative skipped" in text
-    assert "Configuration audit report" in text
+    assert "Security baseline report" in text
     assert any(e.get("phase") == "collect" for e in events)
     assert any(e.get("phase") == "eval" for e in events)
     assert '"fail"' in (store.path / "findings.json").read_text()
