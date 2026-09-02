@@ -1,0 +1,34 @@
+forbidden_services: [telnet, ftp, http]
+mgmt_services: [https, ssh, http, telnet]
+default_hostnames: ["FortiGate", ""]
+wan_mgmt: [https, http, ping, ssh, snmp, radius-acct]
+isdb_inbound:
+  - Tor-Exit.Node
+  - Tor-Relay.Node
+  - Censys-Scanner
+  - Shodan-Scanner
+  - Botnet-C&C.Server
+  - Phishing-Phishing.Server
+  - Proxy-Proxy.Server
+  - Spam-Spamming.Server
+  - VPN-Anonymous.VPN
+  - Malicious-Malicious.Server
+isdb_outbound:
+  - Tor-Relay.Node
+  - Botnet-C&C.Server
+  - Phishing-Phishing.Server
+  - Proxy-Proxy.Server
+  - Spam-Spamming.Server
+  - VPN-Anonymous.VPN
+  - Malicious-Malicious.Server
+webfilter_block: [malicious, phishing, spam]
+appctrl_block: [p2p, proxy]
+fortios_lifecycle:
+  "8.0": {eoes: "2029-04-21", eos: "2030-10-21"}
+  "7.6": {eoes: "2028-07-25", eos: "2030-01-25"}
+  "7.4": {eoes: "2027-05-11", eos: "2028-11-11"}
+  "7.2": {eoes: "2025-03-31", eos: "2026-09-30"}
+  "7.0": {eoes: "2024-03-30", eos: "2025-09-30"}
+  "6.4": {eoes: "2023-03-31", eos: "2024-09-30"}
+  "6.2": {eoes: "2022-03-28", eos: "2023-09-28"}
+  "6.0": {eoes: "2021-03-29", eos: "2022-09-29"}

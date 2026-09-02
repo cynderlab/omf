@@ -1,0 +1,73 @@
+#!/usr/bin/env sh
+set -eu
+ROOT="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+HELP='OH MY FORTRESS
+
+Usage:
+  ./omf              Start the audit TUI (requires ./omf install)
+  ./omf install      Sync dependencies and create .env from .env.example if missing
+  ./omf doctor       Check what is missing (no target connection)
+  ./omf help         Show this help
+
+Flags (TUI / doctor):
+  -v, --debug      DEBUG on stderr (HTTP URLs, LLM transcript; no secrets)
+'
+
+case "${1:-}" in
+  help|-h|--help)
+    printf '%s' "$HELP"
+    exit 0
+    ;;
+  install)
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "uv is not on PATH. Install it:" >&2
+      echo "  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+      exit 1
+    fi
+    uv_status=0
+    uv sync --all-extras --all-groups || uv_status=$?
+    if [ -f "$ROOT/.env" ]; then
+      echo "kept existing .env"
+    elif [ -f "$ROOT/.env.example" ]; then
+      cp "$ROOT/.env.example" "$ROOT/.env"
+      echo "created .env from .env.example"
+    else
+      echo "no .env.example found"
+    fi
+    exit "$uv_status"
+    ;;
+  "")
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "uv is not on PATH. Install it:" >&2
+      echo "  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+      exit 1
+    fi
+    if ! uv run python -c "import omf" >/dev/null 2>&1; then
+      echo "Dependencies are not synced. Run ./omf install" >&2
+      exit 1
+    fi
+    exec uv run python -m omf
+    ;;
+  doctor)
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "MISSING  uv"
+      echo "run: curl -LsSf https://astral.sh/uv/install.sh | sh"
+      exit 1
+    fi
+    exec uv run python -m omf doctor
+    ;;
+  *)
+    if ! command -v uv >/dev/null 2>&1; then
+      echo "uv is not on PATH. Install it:" >&2
+      echo "  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+      exit 1
+    fi
+    if ! uv run python -c "import omf" >/dev/null 2>&1; then
+      echo "Dependencies are not synced. Run ./omf install" >&2
+      exit 1
+    fi
+    exec uv run python -m omf "$@"
+    ;;
+esac

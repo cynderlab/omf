@@ -1,0 +1,1 @@
+{"results": {"ntpsync": "enable", "ntpserver": [{"server": "1.1.1.1"}]}}

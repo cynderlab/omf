@@ -1,0 +1,16 @@
+{
+  "http_method": "GET",
+  "results": {
+    "model_name": "FortiGate",
+    "model_number": "VM64",
+    "model": "FGT_VM64",
+    "hostname": "FortiGate"
+  },
+  "vdom": "root",
+  "path": "system",
+  "name": "status",
+  "status": "success",
+  "serial": "FGVM01TM00000000",
+  "version": "v7.4.4",
+  "build": 2636
+}

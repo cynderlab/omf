@@ -1,0 +1,35 @@
+{
+  "http_method": "GET",
+  "results": {
+    "forticare": {
+      "type": "cloud_service_status",
+      "status": "registered",
+      "registration_status": "registered",
+      "account": "ops@example.com",
+      "support": {
+        "enhanced": {
+          "status": "licensed",
+          "support_level": "24x7",
+          "expires": 1794528000
+        }
+      }
+    },
+    "firmware_updates": {"status": "expired", "expires": 1720310400},
+    "ips": {"status": "expired", "expires": 1720310400},
+    "antivirus": {"status": "expired", "expires": 1720310400},
+    "web_filtering": {"status": "expired", "expires": 1720310400},
+    "antispam": {"status": "expired", "expires": 1720310400},
+    "outbreak_prevention": {"status": "expired", "expires": 1720310400},
+    "sdwan_network_monitor": {"status": "no_license"},
+    "security_rating": {"status": "no_license"},
+    "industrial_db": {"status": "no_license"},
+    "iot_detection": {"status": "no_license"},
+    "forticloud": {"status": "activated"}
+  },
+  "vdom": "root",
+  "path": "license",
+  "name": "status",
+  "status": "success",
+  "serial": "FGVM01TM00000000",
+  "version": "v7.4.4"
+}

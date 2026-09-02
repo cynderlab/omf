@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "name": "GRP_DEAD",
+      "q_ref": 0,
+      "q_static": false
+    },
+    {
+      "name": "GRP_LAN",
+      "q_ref": 2,
+      "q_static": false
+    }
+  ]
+}

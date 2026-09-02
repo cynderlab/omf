@@ -1,0 +1,343 @@
+checks:
+- id: FW-ADM-001
+  title: Default admin username
+  severity: medium
+  needs:
+  - users
+  evaluator: no_generic_accounts
+  params:
+    names:
+    - admin
+    mode: must_not_exist
+  description: |
+    RouterOS ships an enabled local user named admin under /user. That name is public and is the first target for credential spraying. The documented procedure is to create another full-group user, confirm a second session authenticates, then remove admin. An enabled user still named admin keeps the factory identity on the device.
+  mitigation: |
+    Create a replacement user with group=full, confirm a second session authenticates, then remove admin.
+    /user/add name=<name> group=full
+    /user/remove [find name=admin]
+- id: FW-ADM-002
+  title: Admin idle timeout
+  severity: medium
+  needs:
+  - admin_settings
+  - users
+  evaluator: idle_timeout_set
+  params:
+    mode: per_user
+    policies:
+    - logout
+    - lockscreen
+    - lock
+  description: |
+    inactivity-timeout and inactivity-policy are per-user idle controls on each /user account and apply to CLI sessions. An unattended session with the factory policy none stays logged in and is a hijack path on a shared console. This check fails when an enabled user has a missing or non-positive timeout, or a policy other than logout, lockscreen, or lock; 10m with logout is the example.
+  mitigation: |
+    Set inactivity-timeout and inactivity-policy on every user; logout, lockscreen, or lock are accepted.
+    /user/set [find] inactivity-timeout=10m inactivity-policy=logout
+- id: FW-ADM-003
+  title: Device identity
+  severity: low
+  needs:
+  - admin_settings
+  evaluator: hostname_not_default
+  description: |
+    The factory RouterOS identity is MikroTik, and an unset name is empty. Identity is the string the device presents in DHCP, neighbor discovery, SNMP sysName, and the administrative prompt. A unique site hostname is required for inventory and for correlating logs across devices during incident response.
+  mitigation: |
+    Replace the factory MikroTik identity with a unique site hostname.
+    /system identity/set name=<hostname>
+- id: FW-ADM-006
+  title: Timezone
+  severity: low
+  needs:
+  - admin_settings
+  evaluator: timezone_set
+  description: |
+    RouterOS /system clock timezone is the local zone for certificate validity windows, log timestamps, and scheduler start times. An unset zone leaves those clocks unanchored, so SIEM correlation and time-based scripts fire at the wrong wall-clock hour. time-zone-name takes TZ database names so DST is applied automatically.
+  mitigation: |
+    Set the device timezone to the site local zone.
+    /system clock/set time-zone-name=<timezone>
+- id: FW-ADM-009
+  title: Administrator password policy
+  severity: medium
+  needs:
+  - admin_settings
+  evaluator: password_policy_strong
+  params:
+    min_length: 14
+    apply_to:
+    - admin-password
+  description: |
+    /user settings minimum-password-length is the length floor for local RouterOS administrator passwords. Default is unset, so short credentials remain valid. Length dominates brute-force cost; the floor is 14 characters.
+  mitigation: |
+    Set a minimum administrator password length of 14.
+    /user settings/set minimum-password-length=14
+- id: FW-ADM-011
+  title: Administrative HTTP/HTTPS ports
+  severity: low
+  needs:
+  - admin_settings
+  evaluator: admin_ports_changed
+  params:
+    forbidden_http: 80
+    forbidden_https: 443
+  description: |
+    RouterOS www and www-ssl bind TCP 80 and 443 by default. An enabled listener on those well-known ports is the first HTTP/HTTPS target in any scan and collides with forwarded web services on the same box. Moving the management listeners off 80/443 reduces exposure of the GUI and of the REST API that shares www-ssl.
+  mitigation: |
+    Move www and www-ssl off 80/443.
+    /ip service/set [find name=www] port=<http-port>
+    /ip service/set [find name=www-ssl] port=<https-port>
+- id: FW-SVC-001
+  title: Insecure management services
+  severity: high
+  needs:
+  - services
+  evaluator: insecure_services_disabled
+  description: |
+    /ip service is the table of management listeners. Factory default enables telnet, ftp, and www (WebFig HTTP). Telnet, FTP, and cleartext HTTP send credentials in the clear, so any host that can reach those ports can capture them.
+  mitigation: |
+    Disable telnet, ftp, and www so management is not offered in clear text.
+    /ip service/disable telnet,ftp,www
+- id: FW-SVC-002
+  title: Management service listen scope
+  severity: high
+  needs:
+  - services
+  evaluator: services_not_unrestricted
+  description: |
+    Each /ip service entry has an address list of source prefixes allowed to reach that listener. An empty address, 0.0.0.0/0, or ::/0 means the service accepts any source (listen=all). Enabled www, www-ssl, api, api-ssl, ssh, and winbox must not listen on all or unknown scope; an unrestricted management plane lets valid credentials work from any routed network. Bind address to the management segment so only that prefix can open those ports.
+  mitigation: |
+    Restrict each management service (www, www-ssl, api, api-ssl, ssh, winbox) to a trusted source prefix; do not leave address empty or 0.0.0.0/0.
+    /ip service/set [find name=<svc>] address=<network>
+- id: FW-SVC-004
+  title: Auxiliary services
+  severity: low
+  needs:
+  - services
+  evaluator: named_services_disabled
+  params:
+    names:
+    - bandwidth-server
+    - proxy
+    - socks
+    - upnp
+    - cloud-ddns
+    - cloud-update-time
+  description: |
+    Auxiliary RouterOS extras sit outside /ip service. /tool bandwidth-server answers remote throughput tests and can saturate CPU and links. /ip proxy (HTTP cache) and /ip socks relay third-party sessions. /ip upnp installs NAT pinholes without an explicit filter rule. /ip cloud DDNS (cloud-ddns) publishes the WAN address on MikroTik's cloud, and cloud-update-time can override local NTP. Proxy, SOCKS, UPnP, and cloud are off in a default install; bandwidth-server is a production extra commonly left enabled. Leaving any of them on expands the reachable surface beyond management. The unused-service example uses update-time=auto; from RouterOS 7.17 turn off Back To Home before disabling DDNS.
+  mitigation: |
+    Disable production extras that are off in a default hardening. From RouterOS 7.17, disable Back To Home before ddns-enabled=no.
+    /tool bandwidth-server/set enabled=no
+    /ip proxy/set enabled=no
+    /ip socks/set enabled=no
+    /ip upnp/set enabled=no
+    /ip cloud/set ddns-enabled=no update-time=auto
+- id: FW-SVC-005
+  title: SSH strong crypto
+  severity: medium
+  needs:
+  - admin_settings
+  evaluator: flag_enabled
+  params:
+    field: ssh_strong_crypto
+  description: |
+    /ip ssh strong-crypto selects the SSH server cipher, HMAC, and Diffie-Hellman profile used on the management listener. Default is off, so RouterOS still allows 128-bit ciphers, SHA1, MD5, null encryption, and 1024-bit DH. Enabling it uses 192/256-bit encryption, SHA256, and 2048-bit DH and disallows those weaker algorithms, which otherwise leave administrative sessions open to downgrade and cryptanalysis.
+  mitigation: |
+    Enable strong SSH crypto.
+    /ip ssh/set strong-crypto=yes
+- id: FW-L2-001
+  title: Neighbor discovery
+  severity: low
+  needs:
+  - l2_access
+  evaluator: l2_surfaces_closed
+  params:
+    lists:
+    - discover_interface_list
+  description: |
+    Neighbor discovery runs MNDP, CDP, and LLDP on members of discover-interface-list. Those announcements carry identity, platform, version, and addresses on the Layer-2 domain and are not processed by /ip firewall filter, so an IP policy cannot stop adjacent reconnaissance. The factory list is static. This check fails unless the list is none.
+  mitigation: |
+    Disable MNDP/CDP/LLDP announcements.
+    /ip neighbor discovery-settings/set discover-interface-list=none
+- id: FW-L2-002
+  title: MAC management access
+  severity: high
+  needs:
+  - l2_access
+  evaluator: l2_surfaces_closed
+  params:
+    lists:
+    - mac_telnet_interface_list
+    - mac_winbox_interface_list
+    flags_off:
+    - mac_ping_enabled
+  description: |
+    MAC Telnet (/tool mac-server) and MAC Winbox (/tool mac-server mac-winbox) accept administrative sessions by destination MAC. MAC ping (/tool mac-server ping) answers Layer-2 pings used for discovery. Those frames are not IP, so /ip firewall filter cannot block them: MAC management bypasses the IP filter. Factory allowed-interface-list is all (LAN on defconf). Any list other than none, or ping left enabled, leaves a Layer-2 management path on those members.
+  mitigation: |
+    Close Layer-2 management that bypasses the IP filter.
+    /tool mac-server/set allowed-interface-list=none
+    /tool mac-server mac-winbox/set allowed-interface-list=none
+    /tool mac-server ping/set enabled=no
+- id: FW-VPN-001
+  title: PPTP server
+  severity: high
+  needs:
+  - services
+  evaluator: named_services_disabled
+  params:
+    names:
+    - pptp
+  description: |
+    The RouterOS PPTP server terminates remote PPP tunnels on TCP/1723 and GRE. PPTP authenticates with MS-CHAPv2 and encrypts with MPPE. PPTP/MS-CHAPv2 is cryptographically broken: a captured handshake reduces to a 56-bit DES search and yields the NT hash regardless of password length, so the tunnel is not a confidentiality boundary. MikroTik documents PPTP as a legacy protocol with known cryptographic and protocol-level vulnerabilities. Remote access belongs on a current VPN such as WireGuard.
+  mitigation: |
+    Disable the PPTP server. Prefer WireGuard or another current VPN.
+    /interface pptp-server server/set enabled=no
+- id: FW-NTP-001
+  title: NTP servers
+  severity: low
+  needs:
+  - ntp
+  evaluator: ntp_configured
+  description: |
+    Accurate device time is required for TLS certificates, log correlation, and scheduled scripts. RouterOS 7 synchronises the clock through the NTP client at /system ntp client (the NTP server menu only serves time to others). Enable the client and list trusted organisation NTP sources; an empty server list leaves the clock free-running.
+  mitigation: |
+    Enable the NTP client and add at least two trusted time servers.
+    /system ntp client/set enabled=yes
+    /system ntp client servers/add address=<ntp-server>
+    /system ntp client servers/add address=<ntp-server-2>
+- id: FW-DNS-001
+  title: DNS servers
+  severity: low
+  needs:
+  - dns
+  evaluator: dns_configured
+  description: |
+    /ip dns is used for FQDN address-list resolution and other on-box name lookups. The factory servers list is empty, so those lookups fail until servers are set. Untrusted resolvers allow DNS spoofing and MITM of FQDN-based policy.
+  mitigation: |
+    Set DNS servers to org-controlled resolvers, or otherwise trusted ones. Do not leave the list empty.
+    /ip dns/set servers=<ip>
+- id: FW-LOG-001
+  title: Local logging
+  severity: medium
+  needs:
+  - logging
+  evaluator: local_logging_enabled
+  description: |
+    Local memory or disk event logs retain administrator and system events if the remote collector is unreachable. Without on-box logging, a transport outage creates a forensic gap.
+  mitigation: |
+    Enable a logging rule that uses the memory or disk action so events are retained on-box.
+    
+    /system logging/add topics=info action=memory
+- id: FW-LOG-002
+  title: Remote syslog
+  severity: medium
+  needs:
+  - logging
+  evaluator: remote_syslog_configured
+  description: |
+    Remote syslog is the retention and correlation path. RouterOS keeps events in memory or on local disk by default; those copies are lost on reboot, factory reset, or hardware replacement. A collector you control is the durable record of administrative and system events. The built-in remote action must point at a real host (not 0.0.0.0), and an enabled logging rule must send topics to that action.
+  mitigation: |
+    Point the built-in remote logging action at a collector you control, then add a rule that uses it.
+    /system logging action/set [find name=remote] remote=<syslog-host>
+    /system logging/add topics=info action=remote
+- id: FW-SNMP-001
+  title: Default SNMP communities
+  severity: high
+  needs:
+  - snmp
+  evaluator: no_default_snmp_community
+  params:
+    forbidden:
+    - public
+    - private
+    require_read_access: true
+  description: |
+    /snmp community is the SNMPv1/v2c community table. Factory RouterOS includes a community named public with security none and read-access yes. public and private are well-known clear-text community strings; with read-access they let anyone who can reach the agent walk interface, routing, and system data without credentials.
+  mitigation: |
+    Remove the public and private communities. Prefer SNMPv3, or disable SNMP if unused.
+    /snmp community/remove [find name=public]
+    /snmp community/remove [find name=private]
+- id: FW-SNMP-002
+  title: SNMP protocol version
+  severity: medium
+  needs:
+  - snmp
+  evaluator: snmp_not_legacy
+  params:
+    legacy_versions:
+    - none
+  description: |
+    SNMPv1/v2c on RouterOS is an /snmp community with security=none (factory public). The community string and payload go in clear text. SNMPv3 is a community with security=private plus authentication-protocol, authentication-password, encryption-protocol, and encryption-password. Unused SNMP should stay disabled (/snmp enabled=no).
+  mitigation: |
+    Disable the SNMP agent if unused. If monitoring is required, add an SNMPv3 community with security=private and set authentication and encryption; do not leave security=none.
+    /snmp/set enabled=no
+    /snmp community/add name=<name> addresses=<network> security=private authentication-protocol=SHA1 encryption-protocol=AES authentication-password=<auth> encryption-password=<priv> read-access=yes write-access=no
+- id: FW-POL-001
+  title: Unrestricted accept policies
+  severity: high
+  needs:
+  - firewall_filter
+  evaluator: no_any_any_accept
+  params:
+    skip_established: true
+  description: |
+    An enabled IPv4 filter accept with source any, destination any, and no protocol or destination port is a permit-all on that chain for new traffic. Empty src-address / dst-address, 0.0.0.0/0, and 0.0.0.0 are any. in-interface or out-interface does not make the tuple restricted. The evaluator skips established/related connection-state matches, which do not open new sessions.
+  mitigation: |
+    Tighten the unrestricted accept (the observed filter id) to explicit src, dst, protocol, and dst-port. Do not run set [find] against the whole table.
+    /ip firewall filter/set [find comment=<id>] src-address=<net> dst-address=<net> protocol=tcp dst-port=<port>
+- id: FW-POL-002
+  title: Explicit deny policy
+  severity: high
+  needs:
+  - firewall_filter
+  evaluator: explicit_deny_present
+  params:
+    chains:
+    - input
+    - forward
+    unrestricted_only: true
+  description: |
+    RouterOS has no implicit deny: a filter chain that never matches accepts the packet. Without an enabled last drop that matches any source, destination, and service on both input and forward, unmatched traffic to the router or through it is allowed. A drop limited to a host, port, or interface is not a chain default deny.
+  mitigation: |
+    Add a last drop on input and forward.
+    /ip firewall filter/add chain=input action=drop
+    /ip firewall filter/add chain=forward action=drop
+- id: FW-POL-003
+  title: Policy service selection
+  severity: medium
+  needs:
+  - firewall_filter
+  evaluator: no_unrestricted_service
+  params:
+    actions:
+    - accept
+    skip_established: true
+  description: |
+    A RouterOS filter accept with no protocol and no dst-port matches every IP protocol and port. That unrestricted service lets unused applications share the path of the intended flow even when in-interface or out-interface is set. Connection-state established,related accepts do not open new sessions. The chain's last drop is the default deny and stays unmatched on service so leftover traffic is still dropped.
+  mitigation: |
+    Restrict a specific accept rule to an explicit protocol and destination port. Leave the final drop as any.
+    
+    /ip firewall filter/set [find comment=mgmt] protocol=tcp dst-port=22,443
+- id: FW-SYS-001
+  title: Firmware version
+  severity: low
+  needs:
+  - system_info
+  evaluator: firmware_present
+  params:
+    match_current: true
+  description: |
+    RouterBOARD current-firmware is the RouterBOOT image on the board, not the installed RouterOS package. A package install leaves the board on the previous bootloader until it is flashed; lagging firmware misses hardware-init and bootloader fixes that ship with that RouterOS. This check compares the resource version to routerboard current-firmware (channel suffixes ignored).
+  mitigation: |
+    Keep RouterBOARD firmware on the same version as the installed RouterOS package. Run the upgrade and reboot; the new firmware stays inactive until reboot.
+    /system routerboard/upgrade
+- id: FW-SYS-002
+  title: RouterOS update status
+  severity: high
+  needs:
+  - system_info
+  evaluator: firmware_update_current
+  description: |
+    RouterOS records the last package-update snapshot on the selected channel (installed-version, latest-version, and status). An installed package behind latest-version leaves published defects unpatched. This check compares those recorded fields; it does not query MikroTik update servers or install packages.
+  mitigation: |
+    The auditor compares installed-version to latest-version under /system package update. When a newer package is listed for the selected channel, the auditor owns the install.
+    
+    /system package update/install

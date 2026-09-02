@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "policyid": 1,
+      "hit_count": 100,
+      "last_used": 1700000000
+    },
+    {
+      "policyid": 2,
+      "hit_count": 0,
+      "last_used": null
+    }
+  ]
+}

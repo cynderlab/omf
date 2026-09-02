@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "name": "ALL",
+      "q_ref": 40,
+      "q_static": true
+    },
+    {
+      "name": "TCP_DEAD",
+      "q_ref": 0,
+      "q_static": false
+    }
+  ]
+}

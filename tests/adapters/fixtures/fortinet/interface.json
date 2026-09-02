@@ -1,0 +1,6 @@
+{
+  "results": [
+    {"name": "wan1", "role": "wan", "allowaccess": "ping https http ssh"},
+    {"name": "lan", "role": "lan", "allowaccess": "https ssh ping"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "results": [
+    {
+      "policyid": 1,
+      "status": "enable",
+      "action": "accept",
+      "srcaddr": [{"name": "all"}],
+      "dstaddr": [{"name": "all"}],
+      "service": [{"name": "ALL"}],
+      "logtraffic": "disable"
+    }
+  ]
+}

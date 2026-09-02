@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "name": "all",
+      "q_ref": 12,
+      "q_static": true,
+      "q_no_edit": true
+    },
+    {
+      "name": "FABRIC_DEVICE",
+      "q_ref": 0,
+      "q_static": false
+    },
+    {
+      "name": "HOST_OLD",
+      "q_ref": 0,
+      "q_static": false
+    },
+    {
+      "name": "LAN",
+      "q_ref": 3,
+      "q_static": false
+    }
+  ]
+}

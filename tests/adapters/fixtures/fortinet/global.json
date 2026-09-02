@@ -1,0 +1,16 @@
+{
+  "results": {
+    "hostname": "FortiGate",
+    "admintimeout": 5,
+    "pre-login-banner": "disable",
+    "post-login-banner": "disable",
+    "timezone": "US/Pacific",
+    "admin-https-ssl-versions": "tlsv1-2 tlsv1-3",
+    "log-single-cpu-high": "disable",
+    "admin-lockout-threshold": 5,
+    "admin-lockout-duration": 1800,
+    "admin-port": 80,
+    "admin-sport": 443,
+    "admin-https-redirect": "enable"
+  }
+}

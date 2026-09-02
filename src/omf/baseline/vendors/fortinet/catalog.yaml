@@ -1,0 +1,1070 @@
+checks:
+- id: FW-ADM-001
+  title: Default admin username
+  severity: medium
+  needs:
+  - users
+  evaluator: no_generic_accounts
+  params:
+    names:
+    - admin
+    mode: must_be_renamed
+  description: |
+    The factory FortiOS administrator is named admin. That account name is public
+    and is the first target for credential spraying and unattended scripts. FortiOS
+    cannot rename or delete the account you are logged in as, so a second super_admin
+    must exist before admin is removed.
+  mitigation: |
+    Create a replacement administrator with accprofile super_admin, confirm a second session authenticates, then delete admin. Remove leftover references (groups, automation) first.
+    config system admin
+        edit "<name>"
+        set accprofile "super_admin"
+        next
+    end
+    config system admin
+        delete "admin"
+    end
+- id: FW-ADM-002
+  title: Admin idle timeout
+  severity: medium
+  needs:
+  - admin_settings
+  - users
+  evaluator: idle_timeout_set
+  params:
+    max_seconds: 900
+  description: |
+    admintimeout is the idle lifetime of an administrative GUI or CLI session. An
+    open session on a shared workstation is a hijack path. This check fails above
+    900 seconds; the hardened value is 5 minutes.
+  mitigation: |
+    Set administrative idle timeout to 5 minutes.
+    config system global
+        set admintimeout 5
+    end
+- id: FW-ADM-003
+  title: Device identity
+  severity: low
+  needs:
+  - admin_settings
+  evaluator: hostname_not_default
+  description: |
+    The factory hostname is the hardware model string. A unique hostname is required
+    for inventory, certificate CN/SAN alignment, and correlating logs across devices
+    during incident response.
+  mitigation: |
+    Replace the factory model hostname with a unique site identifier.
+    config system global
+        set hostname <hostname>
+    end
+- id: FW-ADM-004
+  title: Pre-login banner
+  severity: medium
+  needs:
+  - admin_settings
+  evaluator: banner_enabled
+  params:
+    field: pre_login_banner
+  description: |
+    pre-login-banner displays a legal notice before authentication. The notice must
+    prohibit unauthorized use, state that the session is monitored, and must not
+    contain welcome or other invitation language. Default is disabled.
+  mitigation: |
+    Enable the pre-login banner, then edit the Pre-login Disclaimer Message so it is a warning, not a welcome.
+    config system global
+        set pre-login-banner enable
+    end
+- id: FW-ADM-005
+  title: Post-login banner
+  severity: medium
+  needs:
+  - admin_settings
+  evaluator: banner_enabled
+  params:
+    field: post_login_banner
+  description: |
+    post-login-banner is an MOTD that the administrator must acknowledge after login.
+    It supports monitoring consent. Enabling it requires an Accept action in GUI and
+    CLI, which breaks unattended scripts until they send that acknowledgement. Default
+    is disabled.
+  mitigation: |
+    Enable the post-login banner and edit the Post-login Disclaimer Message. Update automation that authenticates to FortiOS so it acknowledges the banner.
+    config system global
+        set post-login-banner enable
+    end
+- id: FW-ADM-006
+  title: Timezone
+  severity: low
+  needs:
+  - admin_settings
+  evaluator: timezone_set
+  description: |
+    FortiOS timezone drives certificate validity windows, log timestamps, and schedule
+    objects. A wrong zone makes SIEM correlation and time-based policies unreliable.
+    DST is on by default and is CLI-only.
+  mitigation: |
+    Set timezone to the site local FortiOS zone id (set timezone ? lists ids).
+    config system global
+        set timezone <id>
+    end
+- id: FW-ADM-007
+  title: Management GUI TLS versions
+  severity: high
+  needs:
+  - admin_settings
+  evaluator: tls_versions_allowed
+  params:
+    allowed:
+    - tlsv1-3
+  description: |
+    Administrative HTTPS (admin-https-ssl-versions) terminates TLS on the GUI listener.
+    TLS 1.0/1.1 are obsolete; FortiOS 7.x still allows TLS 1.2 and 1.3 by default.
+    Restricting the listener to TLS 1.3 removes downgrade and older-cipher MITM on
+    the management plane.
+  mitigation: |
+    Restrict the administrative HTTPS listener to TLS 1.3.
+    config system global
+        set admin-https-ssl-versions tlsv1-3
+    end
+- id: FW-ADM-008
+  title: Single-CPU high usage logging
+  severity: medium
+  needs:
+  - admin_settings
+  evaluator: flag_enabled
+  params:
+    field: log_single_cpu_high
+  description: |
+    Aggregate CPU graphs hide a single overloaded core. log-single-cpu-high polls each
+    core every three seconds and writes an event when one core exceeds the CPU threshold
+    (that core is then skipped for 30 seconds). Default is disabled. An unnoticed core
+    spike can stall forwarding while overall CPU still looks idle.
+  mitigation: |
+    Enable single-core high-CPU event logging.
+    config system global
+        set log-single-cpu-high enable
+    end
+- id: FW-ADM-009
+  title: Administrator password policy
+  severity: medium
+  needs:
+  - admin_settings
+  evaluator: password_policy_strong
+  params:
+    min_length: 14
+    apply_to:
+    - admin-password
+    - ipsec-preshared-key
+  description: |
+    system password-policy enforces local administrator credentials and IPsec preshared
+    keys. Default is disabled. Length dominates brute-force cost; the floor is 14
+    characters, applied to both admin-password and ipsec-preshared-key.
+  mitigation: |
+    Enable the password policy at minimum length 14 for administrator credentials and IPsec PSKs.
+    config system password-policy
+        set status enable
+        set apply-to admin-password ipsec-preshared-key
+        set minimum-length 14
+    end
+- id: FW-ADM-010
+  title: Administrator lockout
+  severity: medium
+  needs:
+  - admin_settings
+  evaluator: lockout_configured
+  params:
+    max_threshold: 3
+    max_duration: 900
+  description: |
+    admin-lockout-threshold and admin-lockout-duration rate-limit failed administrator
+    logins. The lockout is on the source address, not the whole account. Without a low
+    threshold, credential spraying continues uninterrupted.
+  mitigation: |
+    Lock the offending source after at most 3 failures for 900 seconds.
+    config system global
+        set admin-lockout-threshold 3
+        set admin-lockout-duration 900
+    end
+- id: FW-ADM-011
+  title: Administrative HTTP/HTTPS ports
+  severity: low
+  needs:
+  - admin_settings
+  evaluator: admin_ports_changed
+  params:
+    forbidden_http: 80
+    forbidden_https: 443
+  description: |
+    The GUI listens on TCP 80 and 443 by default. Even with interface allowaccess
+    restricted, FortiOS still binds those admin ports, which conflicts with later
+    HTTP/HTTPS VIPs and is a trivial scan target. HTTP-to-HTTPS redirect must be
+    disabled: browsers would keep hitting TCP 80 and FortiOS would still listen there.
+  mitigation: |
+    Move admin-port and admin-sport off 80/443 and disable admin-https-redirect. Do not use 8080, 8081, 4433 (FTM push), or 10443 (factory SSL-VPN).
+    config system global
+        set admin-https-redirect disable
+        set admin-port <http-port>
+        set admin-sport <https-port>
+    end
+- id: FW-SVC-001
+  title: Insecure management services
+  severity: high
+  needs:
+  - services
+  evaluator: insecure_services_disabled
+  description: |
+    Interface allowaccess selects which management protocols the FortiGate answers on
+    that L3 interface. HTTP and Telnet send credentials in clear text. Factory default
+    does not enable HTTP or Telnet; adding them expands the management attack surface
+    to every host that can reach the interface.
+  mitigation: |
+    On every interface, allow only encrypted administrative protocols. Do not include http or telnet.
+    config system interface
+        edit <interface>
+        set allowaccess https ssh ping snmp
+    end
+- id: FW-SVC-002
+  title: Management service listen scope
+  severity: high
+  needs:
+  - services
+  evaluator: services_not_unrestricted
+  description: |
+    trusthost1..n on each system admin bind GUI/CLI login to source prefixes. Default
+    is 0.0.0.0/0 (reachable from anywhere with valid credentials). Restricting trusthosts
+    to the management segment stops credential use from the rest of the routing domain.
+    Missing trusthost keys are treated as unrestricted.
+  mitigation: |
+    Set a specific trusthost on every administrator. Do not use 0.0.0.0/0 or ::/0.
+    config system admin
+        edit <admin>
+        set trusthost1 <network> <mask>
+    end
+- id: FW-SVC-003
+  title: WAN management services
+  severity: high
+  needs:
+  - services
+  evaluator: wan_mgmt_disabled
+  description: |
+    WAN allowaccess exposes HTTPS, HTTP, SSH, SNMP, ping, and RADIUS accounting on the
+    untrusted interface. Management-plane CVEs are commonly hit on WAN. IPsec and
+    SSL-VPN should be constrained with local-in policy, not by leaving admin protocols
+    on the WAN address.
+  mitigation: |
+    Clear administrative allowaccess on each WAN interface. Manage the device from a dedicated interface.
+    config system interface
+        edit <wan-interface>
+        unselect allowaccess ping https ssh snmp http radius-acct
+    end
+- id: FW-NET-001
+  title: Intra-zone traffic
+  severity: medium
+  needs:
+  - zones
+  evaluator: intrazone_denied
+  description: |
+    A zone groups interfaces that share policy. intrazone allow forwards between members
+    without a firewall policy. Setting intrazone deny forces east-west traffic through
+    firewall policy, including IPS/UTM if attached.
+  mitigation: |
+    Set intrazone deny on every zone so intra-zone traffic requires an explicit policy.
+    config system zone
+        edit <zone>
+        set intrazone deny
+    end
+- id: FW-NTP-001
+  title: NTP servers
+  severity: low
+  needs:
+  - ntp
+  evaluator: ntp_configured
+  description: |
+    FortiOS time comes from FortiGuard NTP unless type is custom. Certificates, logs,
+    and schedule objects require accurate time. Use at least two organisation-controlled
+    NTP sources. If NTP authentication is enabled, use SHA1 only (MD5 is not acceptable).
+  mitigation: |
+    Enable NTP sync against trusted servers (custom type, two or more).
+    config system ntp
+        set ntpsync enable
+        set type custom
+        config ntpserver
+            edit 1
+                set server <ntp-server>
+            next
+            edit 2
+                set server <ntp-server-2>
+            next
+        end
+    end
+- id: FW-DNS-001
+  title: DNS servers
+  severity: low
+  needs:
+  - dns
+  evaluator: dns_configured
+  description: |
+    system dns is used for FortiGuard, FQDN addresses, and admin hostname lookup.
+    Factory primary/secondary are FortiGuard anycast (96.45.45.45 / 96.45.46.46).
+    Untrusted resolvers allow DNS spoofing and MITM of those lookups.
+  mitigation: |
+    Set primary and secondary DNS to resolvers you control or otherwise trust. Do not leave factory FortiGuard DNS if policy requires internal resolvers.
+    config system dns
+        set primary <ip>
+        set secondary <ip>
+    end
+- id: FW-LOG-001
+  title: Local logging
+  severity: medium
+  needs:
+  - logging
+  evaluator: local_logging_enabled
+  description: |
+    Local disk event logs retain administrator and system events if the remote collector
+    is unreachable. Without on-box logging, a transport outage creates a forensic gap.
+  mitigation: |
+    Enable local log storage so administrative and system events are retained on-box.
+    config log disk setting
+        set status enable
+    end
+- id: FW-LOG-002
+  title: Remote syslog
+  severity: medium
+  needs:
+  - logging
+  evaluator: remote_syslog_configured
+  description: |
+    Remote syslog (or FortiAnalyzer) is the retention and correlation path. Logs that
+    exist only on the FortiGate are lost on RMA, factory reset, or disk exhaustion.
+  mitigation: |
+    Send logs to a syslog collector you control (reliable transport preferred).
+    config log syslogd setting
+        set status enable
+        set server <ip>
+        set port 514
+    end
+- id: FW-LOG-003
+  title: Remote syslog encryption
+  severity: medium
+  needs:
+  - logging
+  evaluator: syslog_encrypted
+  description: |
+    Syslog in clear text exposes session, policy, and credential-adjacent events on the
+    wire. reliable enables TCP; enc-algorithm high negotiates strong encryption for that
+    session. Default is unencrypted.
+  mitigation: |
+    On the syslogd setting in use, enable reliable transport and high-strength encryption.
+    config log syslogd setting
+        set reliable enable
+        set enc-algorithm high
+    end
+- id: FW-LOG-004
+  title: FortiAnalyzer log encryption
+  severity: medium
+  needs:
+  - logging
+  evaluator: faz_encrypted
+  description: |
+    FortiAnalyzer/FortiManager offload without encryption is readable on the management
+    path. reliable plus enc-algorithm high is the FortiOS control for that channel.
+    Default is disabled.
+  mitigation: |
+    Encrypt FortiAnalyzer log shipping with reliable transport and high-strength encryption.
+    config log fortianalyzer setting
+        set reliable enable
+        set enc-algorithm high
+    end
+- id: FW-SNMP-001
+  title: Default SNMP communities
+  severity: high
+  needs:
+  - snmp
+  evaluator: no_default_snmp_community
+  params:
+    forbidden:
+    - public
+    - private
+  description: |
+    SNMPv1/v2c communities public and private are well-known clear-text community strings.
+    They allow unauthenticated reads (and sometimes writes) of interface, routing, and
+    system data.
+  mitigation: |
+    Delete default SNMPv1/v2c communities. Prefer SNMPv3 auth-priv or disable the SNMP agent.
+    config system snmp community
+        delete <community-id>
+    end
+- id: FW-SNMP-002
+  title: SNMP protocol version
+  severity: medium
+  needs:
+  - snmp
+  evaluator: snmp_not_legacy
+  params:
+    require_v3_user: true
+  description: |
+    SNMPv1/v2c have no authentication or privacy. SNMPv3 with security-level auth-priv,
+    SHA-256 (or stronger) and AES-256 authenticates and encrypts Get/Trap. The agent is
+    disabled by default; if monitoring is required, v1/v2c communities must be empty and
+    at least one v3 user must exist. Legacy NMS that only speak v2c will fail.
+  mitigation: |
+    If SNMP is required: enable the agent, delete every v1/v2c community, add an SNMPv3 user with auth-priv.
+    config system snmp sysinfo
+        set status enable
+    end
+    config system snmp user
+        edit <name>
+        set security-level auth-priv
+        set auth-proto sha256
+        set priv-proto aes256
+    end
+- id: FW-SNMP-003
+  title: SNMP memory trap thresholds
+  severity: medium
+  needs:
+  - snmp
+  evaluator: snmp_memory_traps
+  description: |
+    When free memory drops, FortiOS enters conserve mode and sheds inspection.
+    trap-free-memory-threshold (percent free) and trap-freeable-memory-threshold alert
+    before that. Defaults are 5 and 60; the hardened pair is 20 and 50. Only applies
+    when the SNMP agent is enabled.
+  mitigation: |
+    When SNMP is enabled, set memory trap thresholds to 20 (free) and 50 (freeable).
+    config system snmp sysinfo
+        set trap-free-memory-threshold 20
+        set trap-freeable-memory-threshold 50
+    end
+- id: FW-POL-001
+  title: Unrestricted accept policies
+  severity: medium
+  needs:
+  - firewall_filter
+  evaluator: no_any_any_accept
+  description: |
+    An accept policy with source any, destination any, and service any is an implicit
+    permit-all between the selected interfaces. It bypasses least privilege and makes
+    later UTM profiles the only control.
+  mitigation: |
+    Disable or rewrite every accept policy whose source, destination, and service are all any. Constrain each field to the required addresses and services.
+    config firewall policy
+        edit <id>
+        set srcaddr "<addr>"
+        set dstaddr "<addr>"
+        set service "<svc>"
+    end
+- id: FW-POL-003
+  title: Policy service selection
+  severity: high
+  needs:
+  - firewall_filter
+  evaluator: no_unrestricted_service
+  params:
+    actions:
+    - accept
+  description: |
+    New firewall policies default service to ALL, which permits every IP protocol/port
+    the FortiGate can match. Unauthorized services then pass unless a later profile
+    drops them.
+  mitigation: |
+    Replace service ALL with the specific service objects the flow requires.
+    config firewall policy
+        edit <id>
+        set service "<svc1>" "<svc2>"
+    end
+- id: FW-POL-004
+  title: ISDB deny policies
+  severity: high
+  needs:
+  - firewall_filter
+  evaluator: isdb_denies_present
+  description: |
+    ISDB objects classify Tor, scanners, botnet C2, phishing, anonymous VPN, and
+    known-malicious hosts. Two enabled deny policies (inbound ISDB-src, outbound
+    ISDB-dst) drop that traffic in policy lookup before IPS, which is cheaper and
+    closes a first-level filter. Keep the policies enabled and logged.
+  mitigation: |
+    Add two enabled deny policies: inbound internet-service-src and outbound internet-service, with logtraffic all.
+    config firewall policy
+        edit <inbound-id>
+        set srcintf any
+        set dstintf any
+        set internet-service-src enable
+        set internet-service-src-name "Tor-Exit.Node" "Tor-Relay.Node" "Censys-Scanner" "Shodan-Scanner" "Botnet-C&C.Server" "Phishing-Phishing.Server" "Proxy-Proxy.Server" "Spam-Spamming.Server" "VPN-Anonymous.VPN" "Malicious-Malicious.Server"
+        set dstaddr all
+        set service ALL
+        set schedule always
+        set action deny
+        set logtraffic all
+        set status enable
+    end
+    config firewall policy
+        edit <outbound-id>
+        set srcintf any
+        set dstintf any
+        set srcaddr all
+        set internet-service enable
+        set internet-service-name "Tor-Relay.Node" "Botnet-C&C.Server" "Phishing-Phishing.Server" "Proxy-Proxy.Server" "Spam-Spamming.Server" "VPN-Anonymous.VPN" "Malicious-Malicious.Server"
+        set schedule always
+        set action deny
+        set logtraffic all
+        set status enable
+    end
+- id: FW-POL-005
+  title: Policy logging
+  severity: medium
+  needs:
+  - firewall_filter
+  - logging
+  evaluator: policies_logged
+  description: |
+    Accept policies default to no session log; the implicit deny is also unlogged.
+    That gap removes allow and deny telemetry for hunting and IR. logtraffic all on
+    every policy and fwpolicy-implicit-log cover both sides.
+  mitigation: |
+    Set logtraffic all on every firewall policy and enable logging of the implicit deny.
+    config firewall policy
+        edit <id>
+        set logtraffic all
+    end
+    config log setting
+        set fwpolicy-implicit-log enable
+    end
+- id: FW-POL-006
+  title: Disabled firewall policies
+  severity: low
+  needs:
+  - firewall_filter
+  evaluator: disabled_policies
+  description: |
+    A disabled IPv4 firewall policy stays in the lookup table and in backups. It is
+    leftover configuration: reviewers treat it as live, and a later enable restores
+    an unreviewed path. Disabled rows are hygiene, not a traffic fail.
+  mitigation: |
+    Review each disabled policy. Delete it if the flow is gone; keep it disabled only
+    as a documented exception.
+    config firewall policy
+        delete <id>
+    end
+- id: FW-POL-007
+  title: Zero-hit firewall policies
+  severity: low
+  needs:
+  - object_usage
+  - firewall_filter
+  evaluator: zero_hit_policies
+  description: |
+    Monitor hit_count is the session match count since the last reboot or clear
+    counters. An enabled policy at zero may be unused, newly added, or seasonal.
+    It is a review list, not proof the policy can be deleted.
+  mitigation: |
+    Confirm last_used and change history. If the flow is gone, disable then delete
+    after a watch window. Do not reset counters to make this check pass.
+    config firewall policy
+        edit <id>
+        set status disable
+    end
+- id: FW-OBJ-001
+  title: Unreferenced firewall objects
+  severity: low
+  needs:
+  - object_usage
+  evaluator: unref_objects
+  params:
+    kinds:
+    - address
+    - addrgrp
+    - service
+    - service_group
+    - vip
+    - ippool
+    skip_static: true
+    skip_names:
+    - all
+    - none
+    - FABRIC_DEVICE
+    - FIREWALL_AUTH_PORTAL_ADDRESS
+    - SSLVPN_TUNNEL_ADDR1
+    - ALL
+    - ALL_TCP
+    - ALL_UDP
+    - ALL_ICMP
+  description: |
+    CMDB q_ref is the FortiOS reference count for an object. A custom address, group,
+    service, VIP, or IP pool at zero is not used by policy or other config and only
+    inflates the object table. Built-in and static objects are excluded.
+  mitigation: |
+    Confirm the object is unused in every VDOM that matters, then delete it. Do not
+    delete factory objects (all, none, SSLVPN tunnel addresses, Fabric device).
+    config firewall address
+        delete "<name>"
+    end
+    config firewall addrgrp
+        delete "<name>"
+    end
+    config firewall service custom
+        delete "<name>"
+    end
+- id: FW-LIP-001
+  title: Local-in policies
+  severity: medium
+  needs:
+  - local_in
+  evaluator: local_in_present
+  description: |
+    firewall local-in-policy filters traffic whose destination is a FortiGate interface
+    (GUI, SSH, IKE, ping), with address and service granularity beyond trusthost.
+    Local-in is evaluated before trusthost; a wrong deny can lock out management. There
+    are no local-in policies by default. Use local-in-policy6 for IPv6.
+  mitigation: |
+    Add at least one local-in policy on the management path. Confirm a second admin session still authenticates before relying on the policy.
+    config firewall local-in-policy
+        edit <id>
+        set intf <interface>
+        set srcaddr <addr>
+        set dstaddr all
+        set action deny
+        set service <service>
+        set schedule always
+    end
+- id: FW-LIP-002
+  title: Local-in virtual patch
+  severity: high
+  needs:
+  - local_in
+  evaluator: virtual_patch_on_accept
+  description: |
+    virtual-patch on an accept local-in policy applies FortiGuard FMWP IPS signatures
+    to traffic destined to the FortiGate (GUI/SSH). It shrinks the window between PSIRT
+    publication and firmware upgrade. Requires a valid FMWR entitlement so diagnose
+    autoupdate versions shows the FMWP database. Default is disabled.
+  mitigation: |
+    Enable virtual-patch on every accept local-in policy.
+    config firewall local-in-policy
+        edit <id>
+        set virtual-patch enable
+    end
+- id: FW-HA-001
+  title: HA monitor interfaces
+  severity: medium
+  needs:
+  - ha
+  evaluator: ha_monitors_set
+  description: |
+    HA monitor interfaces trigger failover on link-down of a critical data port. Without
+    monitors, failover is limited to unit death or power loss, so a primary with a dead
+    WAN/LAN NIC keeps the cluster role.
+  mitigation: |
+    When HA is enabled, monitor every critical data interface.
+    config system ha
+        set monitor <if1> <if2>
+    end
+- id: FW-HA-002
+  title: HA reserved management
+  severity: medium
+  needs:
+  - ha
+  evaluator: ha_reserved_mgmt
+  description: |
+    HA configuration sync and the shared virtual MAC hide the secondary. ha-mgmt-status
+    plus ha-mgmt-interfaces carves a non-synced management address so each unit remains
+    reachable. Do not reuse a heartbeat or data port for this interface.
+  mitigation: |
+    Enable reserved HA management with an interface and gateway that are not used as a cluster heartbeat or data port.
+    config system ha
+        set ha-mgmt-status enable
+        config ha-mgmt-interfaces
+            edit 1
+                set interface <interface>
+                set gateway <gateway>
+            next
+        end
+    end
+- id: FW-UTM-001
+  title: IPS sensor on accept policies
+  severity: high
+  needs:
+  - firewall_filter
+  evaluator: utm_on_accept
+  params:
+    field: ips_sensor
+  description: |
+    An accept policy without ips-sensor forwards matching traffic uninspected by IPS.
+    Attach an IPS sensor to every enabled accept policy so inter-interface flows are
+    signature-checked.
+  mitigation: |
+    Attach an IPS sensor to every enabled accept policy.
+    config firewall policy
+        edit <id>
+        set ips-sensor <profile>
+    end
+- id: FW-UTM-002
+  title: DNS filter query logging
+  severity: medium
+  needs:
+  - utm
+  evaluator: utm_profile_log_all
+  params:
+    kind: dnsfilter
+  description: |
+    DNS filter logs blocked categories by default and skips allowed queries. log-all-domain
+    records every query/response for hunting when no other DNS telemetry (AD/EDR) exists.
+    Default is disabled.
+  mitigation: |
+    Enable log-all-domain on each DNS filter profile used in policy.
+    config dnsfilter profile
+        edit <profile>
+        set log-all-domain enable
+    end
+- id: FW-UTM-003
+  title: DNS filter on accept policies
+  severity: high
+  needs:
+  - firewall_filter
+  evaluator: utm_on_accept
+  params:
+    field: dnsfilter_profile
+  description: |
+    Outbound DNS that bypasses a dnsfilter-profile is not subjected to FortiGuard domain
+    categories or botnet C2 redirect. Accept policies that carry DNS toward the Internet
+    need a DNS filter profile.
+  mitigation: |
+    Attach a DNS filter profile to every enabled accept policy.
+    config firewall policy
+        edit <id>
+        set dnsfilter-profile <profile>
+    end
+- id: FW-UTM-004
+  title: Web filter categories
+  severity: high
+  needs:
+  - utm
+  evaluator: utm_profile_blocks
+  params:
+    kind: webfilter
+  description: |
+    FortiGuard Security Risk URL categories (Malicious Websites 26, Phishing 61, Spam
+    URLs 86) are initial-access and C2 vectors. At least one web filter profile must
+    block those three. Allowing a specific site in those categories is an explicit
+    monitor/override, not a category allow.
+  mitigation: |
+    In the web filter profile attached to policy, set FortiGuard categories Malicious Websites (26), Phishing (61), and Spam URLs (86) to block.
+    config webfilter profile
+        edit <profile>
+        config ftgd-wf
+            config filters
+                edit 1
+                    set category 26
+                    set action block
+                next
+                edit 2
+                    set category 61
+                    set action block
+                next
+                edit 3
+                    set category 86
+                    set action block
+                next
+            end
+        end
+    end
+- id: FW-UTM-005
+  title: Application control categories
+  severity: high
+  needs:
+  - utm
+  evaluator: utm_profile_blocks
+  params:
+    kind: appctrl
+  description: |
+    Application Control categories P2P (2) and Proxy (6) are common malware and evasion
+    channels, often TLS-wrapped. Default category action is Monitor. Blocking the
+    categories closes that path; a business exception is a per-application Monitor
+    override, not an Allow on the category.
+  mitigation: |
+    Block the P2P and Proxy application categories.
+    config application list
+        edit <profile>
+        config entries
+            edit 1
+                set category 2
+                set action block
+            next
+            edit 2
+                set category 6
+                set action block
+            next
+        end
+    end
+- id: FW-UTM-006
+  title: Application control allow categories
+  severity: high
+  needs:
+  - utm
+  evaluator: utm_profile_no_allow
+  params:
+    kind: appctrl
+  description: |
+    Application Control Action Allow generates no AppCtrl log, including Unknown
+    Applications (Allow by default). That is a visibility gap. Monitor logs without
+    blocking.
+  mitigation: |
+    Change every application-control category Action Allow to Monitor, including Unknown Applications.
+    config application list
+        edit <profile>
+        config entries
+            edit <id>
+                set action monitor
+            next
+        end
+    end
+- id: FW-UTM-007
+  title: Application control on accept policies
+  severity: high
+  needs:
+  - firewall_filter
+  evaluator: utm_on_accept
+  params:
+    field: application_list
+  description: |
+    Accept policies without application-list skip AppCtrl, so P2P/Proxy blocks and
+    AppCtrl logging never run on that flow.
+  mitigation: |
+    Attach an application control profile to every enabled accept policy.
+    config firewall policy
+        edit <id>
+        set application-list <profile>
+    end
+- id: FW-FAB-001
+  title: Compromised Host Quarantine stitch
+  severity: high
+  needs:
+  - utm
+  evaluator: stitch_enabled
+  description: |
+    The Compromised Host Quarantine stitch fires on a high-severity compromised-host
+    IoC and quarantines the MAC on FortiAP/FortiSwitch and the FortiClient EMS endpoint.
+    It is a no-op without that Fabric ecosystem. Default stitch is present and disabled.
+  mitigation: |
+    Enable the default Compromised Host Quarantine stitch (and its quarantine actions) if FortiAP, FortiSwitch, or FortiClient EMS is in use.
+    config system automation-stitch
+        edit "Compromised Host Quarantine"
+        set status enable
+    end
+- id: FW-SYS-001
+  title: Firmware version
+  severity: low
+  needs:
+  - system_info
+  evaluator: firmware_present
+  description: |
+    The recorded FortiOS build is the index into PSIRT advisories and the upgrade path.
+    This check only verifies that a version string was collected, not that it is current.
+  mitigation: |
+    Record the FortiOS version from get system status and compare it offline to the Fortinet upgrade path and PSIRT feed. Do not jump multiple major releases in one step.
+    get system status
+- id: FW-SYS-002
+  title: FortiOS support lifecycle
+  severity: high
+  needs:
+  - system_info
+  evaluator: firmware_supported
+  description: |
+    FortiOS branches leave engineering support on published EoES/EoS dates. An unsupported
+    branch receives no PSIRT firmware fixes. This check uses the static table in the
+    Fortinet profile, not a live portal query.
+  mitigation: |
+    Upgrade to a FortiOS branch that is still in engineering support. Confirm dates on the Fortinet Product Life Cycle page before choosing the target branch.
+- id: FW-LIC-001
+  title: FortiCare Support
+  severity: medium
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: forticare
+    required: true
+  description: |
+    FortiCare Support is the registration contract that gates firmware download, RMA,
+    and FortiGuard service entitlements. An unregistered or expired FortiCare contract
+    leaves signature feeds and firmware updates stale.
+  mitigation: |
+    Register the device and renew the FortiCare support contract.
+    diagnose autoupdate versions
+    execute update-now
+- id: FW-LIC-002
+  title: Firmware and general updates
+  severity: medium
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: firmware_updates
+    required: true
+  description: |
+    Firmware & General Updates (FMWR) is the FortiGuard entitlement that delivers FortiOS
+    firmware and the FMWP virtual-patch database. Without it, diagnose autoupdate versions
+    will not refresh those engines.
+  mitigation: |
+    Renew Firmware & General Updates on the FortiCare contract, then run execute update-now.
+    diagnose autoupdate versions
+    execute update-now
+- id: FW-LIC-003
+  title: Intrusion Prevention license
+  severity: medium
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: ips
+    required: true
+  description: |
+    The FortiGuard Intrusion Prevention entitlement delivers IPS signatures used by
+    ips-sensor and local-in virtual-patch. An expired IPS contract leaves those sensors
+    on a stale database.
+  mitigation: |
+    Renew the FortiGuard Intrusion Prevention entitlement, then run execute update-now.
+    diagnose autoupdate versions
+    execute update-now
+- id: FW-LIC-004
+  title: AntiVirus license
+  severity: medium
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: antivirus
+    required: true
+  description: |
+    The FortiGuard AntiVirus entitlement delivers malware signatures for antivirus
+    profiles on accept policies. An expired AV contract leaves file inspection on a
+    stale database.
+  mitigation: |
+    Renew the FortiGuard AntiVirus entitlement, then run execute update-now.
+    diagnose autoupdate versions
+    execute update-now
+- id: FW-LIC-005
+  title: Web Filtering license
+  severity: medium
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: web_filtering
+    required: true
+  description: |
+    The FortiGuard Web Filtering entitlement delivers the URL category database used
+    by webfilter profiles (including Security Risk categories 26/61/86). An expired
+    contract leaves category actions on stale ratings.
+  mitigation: |
+    Renew the FortiGuard Web Filtering entitlement, then run execute update-now.
+    diagnose autoupdate versions
+    execute update-now
+- id: FW-LIC-006
+  title: Email Filtering license
+  severity: medium
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: antispam
+    required: false
+  description: |
+    FortiGuard Email Filtering (antispam) rates SMTP/IMAP/POP3 senders and URIs. If
+    this FortiGate inspects mail, an expired entitlement leaves those ratings stale.
+  mitigation: |
+    Renew FortiGuard Email Filtering if this device inspects mail.
+    diagnose autoupdate versions
+    execute update-now
+- id: FW-LIC-007
+  title: Outbreak Prevention license
+  severity: medium
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: outbreak_prevention
+    required: false
+  description: |
+    FortiGuard Outbreak Prevention adds hash lookups against FortiGuard threat
+    intelligence on top of signature AV. If this device enabled outbreak-prevention
+    on an antivirus profile, an expired entitlement disables that layer.
+  mitigation: |
+    Renew FortiGuard Outbreak Prevention if this device used the service.
+    diagnose autoupdate versions
+    execute update-now
+- id: FW-LIC-008
+  title: SD-WAN Network Monitor license
+  severity: low
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: sdwan_network_monitor
+    required: false
+  description: |
+    SD-WAN Network Monitor is the FortiGuard entitlement for SLA probe quality data
+    used by SD-WAN rules. If this device uses SD-WAN performance SLAs, an expired
+    entitlement degrades path selection.
+  mitigation: |
+    Renew SD-WAN Network Monitor if this device uses SD-WAN SLA probes.
+- id: FW-LIC-009
+  title: Security Rating license
+  severity: low
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: security_rating
+    required: false
+  description: |
+    Security Rating is the FortiGuard entitlement behind Security Fabric rating
+    reports. If the Fabric rating is in use, an expired entitlement stops those
+    checks from refreshing.
+  mitigation: |
+    Renew the Security Rating service if the Fabric rating is in use.
+- id: FW-LIC-010
+  title: Industrial DB license
+  severity: low
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: industrial_db
+    required: false
+  description: |
+    Industrial DB is the FortiGuard OT/ICS protocol and application database. If this
+    device inspects industrial protocols, an expired entitlement leaves AppCtrl/IPS
+    OT signatures stale.
+  mitigation: |
+    Renew Industrial DB if this device inspects OT protocols.
+- id: FW-LIC-011
+  title: IoT Detection license
+  severity: low
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: iot_detection
+    required: false
+  description: |
+    IoT Detection is the FortiGuard device-identification database used to profile
+    IoT endpoints. If this FortiGate profiles IoT devices, an expired entitlement
+    stops new identifications.
+  mitigation: |
+    Renew IoT Detection if this device profiles IoT devices.
+- id: FW-LIC-012
+  title: FortiGate Cloud
+  severity: low
+  needs:
+  - licenses
+  evaluator: license_active
+  params:
+    key: forticloud
+    required: false
+  description: |
+    FortiGate Cloud is the cloud logging and management entitlement. If this device
+    is meant to log or be managed there, an inactive FortiCloud registration drops
+    that offload path.
+  mitigation: |
+    Activate or renew FortiGate Cloud if this device is meant to log or be managed there.
