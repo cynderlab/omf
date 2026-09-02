@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 from omf.baseline.evaluators.admin import (
     admin_ports_changed,
-    banner_enabled,
     flag_enabled,
     lockout_configured,
     password_policy_strong,
@@ -64,7 +63,7 @@ def settings(**kwargs):
 
 
 def test_pre_login_banner_fail_when_disabled():
-    r = banner_enabled({"admin_settings": settings(pre_login_banner=False)}, {"field": "pre_login_banner"}, "fortinet")
+    r = flag_enabled({"admin_settings": settings(pre_login_banner=False)}, {"field": "pre_login_banner"}, "fortinet")
     assert r.status == "fail"
 
 

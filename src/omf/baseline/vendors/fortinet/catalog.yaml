@@ -61,7 +61,7 @@ checks:
   severity: medium
   needs:
   - admin_settings
-  evaluator: banner_enabled
+  evaluator: flag_enabled
   params:
     field: pre_login_banner
   description: |
@@ -78,7 +78,7 @@ checks:
   severity: medium
   needs:
   - admin_settings
-  evaluator: banner_enabled
+  evaluator: flag_enabled
   params:
     field: post_login_banner
   description: |

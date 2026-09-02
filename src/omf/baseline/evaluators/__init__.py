@@ -7,7 +7,6 @@ from collections.abc import Callable, Mapping
 from omf.baseline.evaluators.accounts import no_generic_accounts
 from omf.baseline.evaluators.admin import (
     admin_ports_changed,
-    banner_enabled,
     flag_enabled,
     hostname_not_default,
     idle_timeout_set,
@@ -64,7 +63,6 @@ REGISTRY: dict[str, Evaluator] = {
     "no_generic_accounts": no_generic_accounts,
     "idle_timeout_set": idle_timeout_set,
     "hostname_not_default": hostname_not_default,
-    "banner_enabled": banner_enabled,
     "timezone_set": timezone_set,
     "tls_versions_allowed": tls_versions_allowed,
     "flag_enabled": flag_enabled,

@@ -76,21 +76,6 @@ def hostname_not_default(
     )
 
 
-def banner_enabled(evidence, params, vendor) -> CheckResult:
-    field = str(params.get("field") or "pre_login_banner")
-    payload = evidence["admin_settings"].payload
-    value = getattr(payload, field)
-    failed = value is not True
-    return CheckResult(
-        check_id="",
-        status="fail" if failed else "pass",
-        severity="medium",
-        diagnostic=f"{field} is {value!r}",
-        capability_refs=("admin_settings",),
-        observed={field: value},
-    )
-
-
 def timezone_set(evidence, params, vendor) -> CheckResult:
     payload = evidence["admin_settings"].payload
     zone = (payload.timezone or "").strip()

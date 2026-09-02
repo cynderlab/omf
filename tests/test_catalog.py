@@ -267,3 +267,10 @@ def test_vendor_catalogs_are_separate_files():
     assert (root / "mikrotik" / "catalog.yaml").is_file()
     assert (root / "fortinet" / "catalog.yaml").is_file()
     assert not (root.parent / "catalog.yaml").is_file()
+
+
+def test_no_banner_enabled_evaluator():
+    from omf.baseline.evaluators import REGISTRY
+    assert "banner_enabled" not in REGISTRY
+    for check in load_catalog("fortinet"):
+        assert check.evaluator != "banner_enabled", check.id
