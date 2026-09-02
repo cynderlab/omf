@@ -11,36 +11,27 @@
 
 # OH MY FORTRESS
 
-Read-only hardening audit of **perimeter security products** (firewalls and UTM) for a consultant auditor.
+Read-only hardening audit of **perimeter security products** (firewalls and UTM). Connect to the management plane, collect evidence, evaluate a published baseline. Optional AI narrative from **redacted** findings only. Reports land in `./audits/`.
 
-Connect once to the management plane. Collect evidence. Evaluate a **published baseline**. An optional AI agent writes the narrative from **redacted** findings only. Output lands under `./audits/`.
-
-It does not change the target, does not SSH, and does not let the model pick checks. If the agent is missing or fails, you still get collect + evaluate + a skeleton report. The TUI also offers **Evaluation only (no LLM)**.
-
-Treat findings as a starting point for the auditor, not a finished certification.
+It does not change the target. Findings are a starting point for the auditor, not a certification.
 
 How the code works, and how to add a vendor: **[DEVELOPERS.md](DEVELOPERS.md)**.
 
 | | |
 |---|---|
-| **Version** | 1.0.1 |
 | **Author** | [Pere Casas](mailto:pcasas@cynderlab.com) · [Cynderlab](https://cynderlab.com) |
-| **License** | [Elastic License 2.0](LICENSE) — use, copy, modify; no hosted or managed service |
-| **Stack** | Python 3.12+ · [uv](https://docs.astral.sh/uv/) only |
 | **Tested on** | Linux, macOS |
 
 ## Supported products
 
-Perimeter firewalls and UTM only. Not servers, not SaaS, not endpoints.
-
 | Product | Status | Access |
 |---|---|---|
-| MikroTik RouterOS 7+ | Supported | REST (`/rest/...`, HTTP Basic) |
-| Fortinet FortiOS | Partial | REST (`/api/v2/...`, token or session login) |
+| MikroTik RouterOS 7+ | Supported | REST, HTTP Basic |
+| Fortinet FortiOS | Partial | REST, token or session login |
 | pfSense | Coming soon | |
 | SonicWall | Coming soon | |
 
-**Supported** means the catalog has been exercised against a live firewall. **Partial** means the adapter and checks exist but are not at the same confidence. **Coming soon** is a perimeter product planned for a later release, not in this tree.
+**Supported** — exercised on a live device. **Partial** — adapter and checks exist, less field confidence.
 
 ## Getting started
 
@@ -55,11 +46,9 @@ cd omf
 ./omf
 ```
 
-The wizard asks vendor, URL, and credentials. Evaluation-only reports are English. LLM narrative also asks report language (`ca` | `es` | `en`). TLS verification is off for firewall packs — management certs are usually self-signed. Create a dedicated read-only collector first ([Audit account](#audit-account)).
+The wizard asks vendor, URL, and credentials. Create a dedicated read-only collector first ([Audit account](#audit-account)). TLS verification is off — management certs are usually self-signed. Password and API token stay in RAM and are wiped on exit.
 
-**Password and API token stay in RAM.** They are wiped on every exit. The target URL is written only in `report.html` and optional prefs `last_url`.
-
-Optional written narrative — set in `./.env` or `~/.config/omf/.env`:
+Optional LLM narrative (`ca` | `es` | `en`) — `./.env` or `~/.config/omf/.env`:
 
 ```bash
 OMF_LLM_BASE_URL=
@@ -68,15 +57,19 @@ OMF_LLM_MODEL=
 OMF_LLM_API_STYLE=openai    # or anthropic
 ```
 
-`./omf doctor` **warns** (exit 0) if LLM env is missing. Collect and evaluate still work. Choose **Evaluation only (no LLM)** in the TUI to skip the model even when env is set.
+Without LLM env, or if you pick **Evaluation only (no LLM)** in the TUI, you still get collect + evaluate + a skeleton report (English).
+
+Each run writes `./audits/YYYY-MM-DDTHHMMSS-{vendor}/`. Review the folder before you share it. Mitigations in the report are **examples**.
+
+`./omf -v` logs HTTP paths and phases on stderr. No secrets.
 
 ## Audit account
 
-OMF only `GET`s. It does not create users and does not change device config. Have a privileged admin create a **dedicated collector** before you run the TUI. Do not use `admin` / `full` / `super_admin`.
+Have a privileged admin create a **dedicated collector**. Do not use `admin` / `full` / `super_admin`. Restrict the source IP. Delete the account when the engagement ends.
 
 ### MikroTik RouterOS 7+
 
-REST is HTTP Basic on `www-ssl` (`https://<ip>/rest/...`). Enable [`www-ssl`](https://help.mikrotik.com/docs/display/ROS/REST+API). Make a custom group; include `sensitive` so SNMP communities are visible.
+Enable [`www-ssl`](https://help.mikrotik.com/docs/display/ROS/REST+API). Include `sensitive` so SNMP communities are visible.
 
 ```
 /ip service set www-ssl disabled=no
@@ -84,11 +77,9 @@ REST is HTTP Basic on `www-ssl` (`https://<ip>/rest/...`). Enable [`www-ssl`](ht
 /user add name=omf group=omf password=<password> address=<auditor-ipv4>/32
 ```
 
-TUI: vendor MikroTik, URL `https://<ip>`, username `omf`, password.
-
 ### Fortinet FortiOS
 
-Prefer an [API token](https://docs.fortinet.com/document/fortigate/7.4.8/administration-guide/399023/rest-api-administrator). Session login is a normal admin user. The interface OMF reaches must allow HTTPS. Create a [read-only access profile](https://docs.fortinet.com/document/fortigate/7.4.8/cli-reference/309990135/config-system-accprofile). `scope global` is required. Do not use `super_admin` or `prof_admin`.
+Prefer an [API token](https://docs.fortinet.com/document/fortigate/7.4.8/administration-guide/399023/rest-api-administrator). The interface OMF reaches must allow HTTPS. Create a [read-only access profile](https://docs.fortinet.com/document/fortigate/7.4.8/cli-reference/309990135/config-system-accprofile) with `scope global`. Do not use `super_admin` or `prof_admin`.
 
 ```
 config system accprofile
@@ -142,34 +133,6 @@ config system admin
 end
 ```
 
-You own this change on the device. Restrict the source IP. Delete the collector when the engagement ends.
-
-## Commands
-
-| Command | Purpose |
-|---|---|
-| `./omf` | Audit TUI |
-| `./omf install` | Sync deps; create `.env` from `.env.example` if missing |
-| `./omf doctor` | Required vs warn. Never talks to a target. |
-| `./omf help` | Help |
-| `./omf -v` | DEBUG on stderr: HTTP **paths** and phases. No secrets. |
-
-There is no `audit` / `report` subcommand. The TUI is the product.
-
-Each run writes `./audits/YYYY-MM-DDTHHMMSS-{vendor}/` (gitignored). Review the folder before you share it. Mitigations in the report are **examples**. You own any change on the target.
-
-## Privacy
-
-- Password and API token are never written to disk, logs, or LLM payloads.
-- Adapters are GET only (plus FortiOS login/logout cookies when there is no token).
-- The model sees only redacted findings. Identifiers become tokens (`[IP_n]`, `[USER_n]`, …). Destokenize happens locally.
-
 ## License
 
 **[Elastic License 2.0](LICENSE)** — use, copy, modify, including commercially. You may **not** provide OMF as a hosted or managed service.
-
-See [LICENSE](LICENSE) for the full terms.
-
-## Author
-
-**Pere Casas** · pcasas@cynderlab.com · Cynderlab
