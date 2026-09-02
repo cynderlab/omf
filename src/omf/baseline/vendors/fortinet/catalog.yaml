@@ -8,7 +8,6 @@ checks:
   params:
     names:
     - admin
-    mode: must_be_renamed
   description: |
     The factory FortiOS administrator is named admin. That account name is public
     and is the first target for credential spraying and unattended scripts. FortiOS

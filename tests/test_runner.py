@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+import json
 from omf.adapters.base import CollectError
 from omf.runner import Runner
 from omf.store import AuditStore
@@ -76,3 +77,24 @@ def test_collect_failure_errors_dependents(tmp_path: Path):
     result = Runner(adapter, checks, store).run()
     assert result.findings[0].status == "error"
     assert (store.path / "findings.json").is_file()
+
+
+def test_eval_events_omit_diagnostic(tmp_path: Path):
+    from omf.baseline.loader import CheckDef
+    checks = (
+        CheckDef("A", "a", "high", ("users",), "no_generic_accounts", {}, "x"),
+    )
+    store = AuditStore(tmp_path, "mikrotik", datetime.now(timezone.utc))
+    captured: list[dict] = []
+    Runner(FakeAdapter(), checks, store, captured.append).run()
+    eval_events = [event for event in captured if event.get("phase") == "eval"]
+    assert eval_events
+    for event in eval_events:
+        assert event.get("check_id") == "A"
+        assert event.get("status") in {"pass", "fail", "error", "skipped"}
+        assert "diagnostic" in event
+    for line in (store.path / "events.jsonl").read_text().splitlines():
+        row = json.loads(line)
+        if row.get("phase") == "eval":
+            assert "diagnostic" not in row
+            assert set(row) >= {"phase", "check_id", "status", "severity"}

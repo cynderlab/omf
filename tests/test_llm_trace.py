@@ -91,7 +91,7 @@ def test_run_analysis_debug_dumps_what_we_ask(monkeypatch, capsys):
 
     monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
 
-    ctx = AnalysisContext([], {}, load_catalog(), "mikrotik", "ca", [])
+    ctx = AnalysisContext([], load_catalog(), "mikrotik", "ca")
     configure(debug=True)
     try:
         run_analysis(

@@ -44,3 +44,6 @@ def test_writes_raw_evidence_findings(tmp_path: Path):
     assert (store.path / "redacted" / "transcript.md").read_text() == "system + user prompt\n"
     with pytest.raises(ValueError):
         store.append_event({"password": "x"})
+    for key in ("url", "host", "username"):
+        with pytest.raises(ValueError):
+            store.append_event({key: "x"})

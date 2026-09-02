@@ -9,7 +9,15 @@ from pathlib import Path
 from omf.schema.evidence import CheckResult, Evidence
 
 _META_FORBIDDEN = frozenset({"url", "username", "password", "token", "api_key"})
-_EVENT_FORBIDDEN = frozenset({"password", "token", "authorization", "api_key"})
+_EVENT_FORBIDDEN = frozenset({
+    "host",
+    "url",
+    "username",
+    "password",
+    "token",
+    "authorization",
+    "api_key",
+})
 
 
 class AuditStore:

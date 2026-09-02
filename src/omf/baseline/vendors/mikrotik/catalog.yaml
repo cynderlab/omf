@@ -8,7 +8,6 @@ checks:
   params:
     names:
     - admin
-    mode: must_not_exist
   description: |
     RouterOS ships an enabled local user named admin under /user. That name is public and is the first target for credential spraying. The documented procedure is to create another full-group user, confirm a second session authenticates, then remove admin. An enabled user still named admin keeps the factory identity on the device.
   mitigation: |

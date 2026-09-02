@@ -93,7 +93,6 @@ def run_audit(
             checks=checks,
             findings=result.findings,
             redacted_findings=redacted_findings,
-            redacted_evidence=redacted_evidence,
             skip_llm=skip_llm,
             report_language=report_language,
         )
@@ -125,7 +124,6 @@ def _analysis_body(
     checks,
     findings,
     redacted_findings,
-    redacted_evidence: dict[str, dict],
     report_language: str,
     skip_llm: bool = False,
 ) -> str:
@@ -143,11 +141,9 @@ def _analysis_body(
         )
     ctx = AnalysisContext(
         findings=[item for item in redacted_findings if isinstance(item, dict)],
-        evidence=redacted_evidence,
         checks=checks,
         vendor=session.vendor,
         language=report_language,
-        submitted=[],
     )
     try:
         _log.info("llm start model=%s style=%s", model, style)
@@ -167,7 +163,7 @@ def _analysis_body(
         _emit(store, on_event, {"phase": "llm", "status": "done", "model": model})
         return body
     except (LlmNotConfigured, Exception) as exc:
-        _log.warning("llm fallback: %s", exc)
+        _log.warning("llm fallback: %s", _safe_exc_detail(exc, llm.api_key))
         _write_transcript(store, ctx)
         _emit(store, on_event, {
             "phase": "llm",

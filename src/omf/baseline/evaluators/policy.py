@@ -14,21 +14,8 @@ def _is_established(policy) -> bool:
     return "established" in {state.lower() for state in policy.connection_state}
 
 
-def _is_interface_scoped(policy) -> bool:
-    return bool(
-        policy.in_interface
-        or policy.out_interface
-        or policy.in_interface_list
-        or policy.out_interface_list
-    )
-
-
 def _skip_mikrotik_noise(policy, params: dict) -> bool:
     if params.get("skip_established") and _is_established(policy):
-        return True
-    if params.get("skip_established_forward") and policy.chain == "forward" and _is_established(policy):
-        return True
-    if params.get("skip_interface_scoped") and _is_interface_scoped(policy):
         return True
     return False
 

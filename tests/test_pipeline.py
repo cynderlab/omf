@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
+import json
+import logging
 from omf.pipeline import run_audit
 from omf.session import Session
 from omf.store import AuditStore
@@ -98,6 +100,7 @@ def test_pipeline_skeleton_report_and_no_secrets_on_disk(tmp_path: Path):
     assert (store.path / "redacted" / "findings.json").is_file()
     assert (store.path / "token_map.json").is_file()
     assert not (store.path / "redacted" / "transcript.md").is_file()
+    store.assert_no_secrets(["s3cret", "tokentok"])
 
 
 def test_pipeline_redacted_findings_hide_hostname_and_username(tmp_path: Path):
@@ -112,6 +115,13 @@ def test_pipeline_redacted_findings_hide_hostname_and_username(tmp_path: Path):
     clear = (store.path / "findings.json").read_text()
     assert "home-fw" in clear
     assert "reader" in clear
+    events_text = (store.path / "events.jsonl").read_text()
+    assert "home-fw" not in events_text
+    assert "reader" not in events_text
+    for line in events_text.splitlines():
+        row = json.loads(line)
+        if row.get("phase") == "eval":
+            assert "diagnostic" not in row
 
 
 def test_pipeline_writes_llm_transcript(tmp_path: Path, monkeypatch):
@@ -120,8 +130,7 @@ def test_pipeline_writes_llm_transcript(tmp_path: Path, monkeypatch):
             "--- LLM transcript (what the model saw; already redacted) ---\n"
             "Write the configuration audit report using only the tools.\n"
         )
-        ctx.submitted.append("## Resum executiu\n")
-        return ctx.submitted[-1]
+        return "## Resum executiu\n"
 
     monkeypatch.setattr("omf.pipeline.run_analysis", fake_run)
     session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "tokentok", True, "ca")
@@ -209,3 +218,16 @@ def test_safe_exc_detail_strips_api_key():
     assert "sk-secret-value" not in detail
     assert "RuntimeError" in detail
     assert "[STRIPPED]" in detail
+
+
+def test_llm_fallback_log_strips_api_key(tmp_path: Path, monkeypatch, caplog):
+    def fake_run(ctx, settings, on_event=None):
+        raise RuntimeError(f"Incorrect API key provided: {settings.api_key}")
+
+    monkeypatch.setattr("omf.pipeline.run_analysis", fake_run)
+    session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "", True, "en")
+    store = AuditStore(tmp_path, "mikrotik", datetime.now(timezone.utc))
+    llm = LlmSettings("http://llm.example", "sk-secret-test", "model", "openai")
+    caplog.set_level(logging.WARNING, logger="omf.pipeline")
+    run_audit(session, store, FullFake(), llm, lambda event: None)
+    assert "sk-secret-test" not in caplog.text

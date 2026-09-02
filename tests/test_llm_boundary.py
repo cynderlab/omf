@@ -4,11 +4,7 @@ from omf.agent.tools import (
     fail_pack,
     get_finding,
     get_mitigation,
-    get_redacted_evidence,
-    list_findings,
-    make_tools,
     status_counts,
-    submit_report,
 )
 from omf.baseline.loader import CheckDef, load_catalog
 from omf.redactor import Redactor
@@ -24,8 +20,7 @@ def _ctx():
         "diagnostic": "enabled user matches vendor default name 'admin'",
         "observed": {"names": ["admin"]},
     })]
-    evidence = {"users": r.redact_obj({"users": [{"name": "admin", "enabled": True}]})}
-    return AnalysisContext(findings, evidence, load_catalog(), "mikrotik", "ca", []), r
+    return AnalysisContext(findings, load_catalog(), "mikrotik", "ca"), r
 
 
 def test_get_finding_caps_long_observed_lists():
@@ -43,11 +38,9 @@ def test_get_finding_caps_long_observed_lists():
                 "observed": {"policies": policies},
             }
         ],
-        {},
         load_catalog("fortinet"),
         "fortinet",
         "en",
-        [],
     )
     finding = get_finding(ctx, "FW-POL-001")
     listed = finding["observed"]["policies"]
@@ -56,31 +49,6 @@ def test_get_finding_caps_long_observed_lists():
     assert finding["observed"]["policies_truncated"] is True
     blob = json.dumps(finding)
     assert '"id": "30"' not in blob
-
-
-def test_get_redacted_evidence_caps_long_lists():
-    policies = [
-        {"id": str(i), "enabled": True, "action": "accept", "src": ["any"], "dst": ["any"]}
-        for i in range(52)
-    ]
-    ctx = AnalysisContext(
-        [],
-        {"firewall_filter": {"capability": "firewall_filter", "payload": {"policies": policies}}},
-        load_catalog(),
-        "fortinet",
-        "ca",
-        [],
-    )
-    ev = get_redacted_evidence(ctx, "firewall_filter")
-    listed = ev["payload"]["policies"]
-    assert len(listed) == 12
-    assert ev["payload"]["policies_total"] == 52
-    assert ev["payload"]["policies_truncated"] is True
-    assert listed[0]["id"] == "0"
-    assert listed[-1]["id"] == "11"
-    blob = json.dumps(ev)
-    assert '"id": "40"' not in blob
-    assert len(blob) < 8000
 
 
 def test_model_for_sets_http_timeout():
@@ -93,29 +61,10 @@ def test_model_for_sets_http_timeout():
     assert timeout.read == _LLM_TIMEOUT.read
 
 
-def test_get_redacted_evidence_keeps_short_lists():
-    users = [{"name": "admin", "enabled": True}]
-    ctx = AnalysisContext(
-        [],
-        {"users": {"capability": "users", "payload": {"users": users}}},
-        load_catalog(),
-        "mikrotik",
-        "ca",
-        [],
-    )
-    ev = get_redacted_evidence(ctx, "users")
-    assert ev["payload"]["users"] == users
-    assert "users_truncated" not in ev["payload"]
-    assert "users_total" not in ev["payload"]
-
-
 def test_tools_return_redacted_only():
     ctx, r = _ctx()
-    listed = list_findings(ctx)
-    assert listed[0]["check_id"] == "FW-ADM-001"
     finding = get_finding(ctx, "FW-ADM-001")
-    ev = get_redacted_evidence(ctx, "users")
-    blob = json.dumps({"listed": listed, "finding": finding, "ev": ev, "mit": get_mitigation(ctx, "FW-ADM-001")})
+    blob = json.dumps({"finding": finding, "mit": get_mitigation(ctx, "FW-ADM-001")})
     assert "token_map" not in blob
     assert "password" not in blob
     assert "192." not in blob
@@ -143,16 +92,21 @@ def test_get_finding_includes_catalog_description():
                 "observed": {"names": ["admin"]},
             }
         ],
-        {},
         (check,),
         "fortinet",
         "en",
-        [],
     )
     finding = get_finding(ctx, "FW-ADM-001")
     assert finding["description"] == "The factory FortiOS administrator is named admin."
     assert finding["diagnostic"] == "enabled user matches vendor default name 'admin'"
     assert finding["observed"] == {"names": ["admin"]}
+
+
+def test_get_mitigation_returns_catalog_text():
+    ctx, _ = _ctx()
+    text = get_mitigation(ctx, "FW-ADM-001")
+    assert "admin" in text.lower()
+    assert get_mitigation(ctx, "NO-SUCH") == ""
 
 
 def test_fail_pack_is_fails_only_and_capped():
@@ -184,11 +138,9 @@ def test_fail_pack_is_fails_only_and_capped():
                 "observed": {"key": "forticloud", "status": "expired"},
             },
         ],
-        {},
         load_catalog("fortinet"),
         "fortinet",
         "en",
-        [],
     )
     pack = fail_pack(ctx)
     assert [row["check_id"] for row in pack] == ["FW-POL-001", "FW-LIC-012"]
@@ -200,34 +152,13 @@ def test_fail_pack_is_fails_only_and_capped():
     assert status_counts(ctx) == {"fail": 2, "pass": 1, "error": 0, "skipped": 0}
 
 
-def test_submit_appends():
-    ctx, _ = _ctx()
-    submit_report(ctx, "# body")
-    assert ctx.submitted == ["# body"]
+def test_no_function_tool_helpers():
+    import omf.agent.tools as tools
 
-
-def test_make_tools_emits_safe_tool_events():
-    ctx, _ = _ctx()
-    seen: list[dict] = []
-    tools = {tool.name: tool for tool in make_tools(ctx, on_tool=seen.append)}
-    tools["list_findings"].function()
-    tools["get_finding"].function(check_id="FW-ADM-001")
-    tools["get_redacted_evidence"].function(capability="users")
-    tools["get_mitigation"].function(check_id="FW-ADM-001")
-    tools["submit_report"].function(markdown="# secret-body-must-not-leak")
-    names = [event["tool"] for event in seen]
-    assert names == [
-        "list_findings",
-        "get_finding",
-        "get_redacted_evidence",
-        "get_mitigation",
-        "submit_report",
-    ]
-    assert seen[1]["check_id"] == "FW-ADM-001"
-    assert seen[2]["capability"] == "users"
-    blob = json.dumps(seen)
-    assert "secret-body-must-not-leak" not in blob
-    assert "markdown" not in blob
+    assert not hasattr(tools, "make_tools")
+    assert not hasattr(tools, "list_findings")
+    assert not hasattr(tools, "get_redacted_evidence")
+    assert not hasattr(tools, "submit_report")
 
 
 def _narrative_response(
@@ -320,11 +251,9 @@ def test_run_analysis_refuses_leaking_payload(monkeypatch):
             "diagnostic": "peer 10.0.0.5",
             "observed": {},
         }],
-        {},
         load_catalog(),
         "mikrotik",
         "ca",
-        [],
     )
     with pytest.raises(LlmPayloadLeak, match="10.0.0.5"):
         run_analysis(ctx, LlmSettings("http://llm.example", "sk-test", "model", "openai"))
@@ -365,11 +294,9 @@ def test_run_analysis_allows_catalog_policy_tokens(monkeypatch):
                 "observed": {"remote_targets": []},
             },
         ],
-        {},
         load_catalog("mikrotik"),
         "mikrotik",
         "ca",
-        [],
     )
     out = run_analysis(ctx, LlmSettings("http://llm.example", "sk-test", "model", "openai"))
     assert "### FW-SVC-002" in out
@@ -407,11 +334,9 @@ def test_run_analysis_allows_fortinet_catalog_anycast(monkeypatch):
                 "observed": {"servers": []},
             }
         ],
-        {},
         load_catalog("fortinet"),
         "fortinet",
         "en",
-        [],
     )
     out = run_analysis(ctx, LlmSettings("http://llm.example", "sk-test", "model", "openai"))
     assert "### FW-DNS-001" in out
@@ -451,7 +376,7 @@ def test_run_analysis_request_body_excludes_secrets(monkeypatch):
     evidence = {"users": redactor.redact_obj({
         "users": [{"name": "admin", "enabled": True, "password": password}],
     })}
-    ctx = AnalysisContext(findings, evidence, load_catalog(), "mikrotik", "ca", [])
+    ctx = AnalysisContext(findings, load_catalog(), "mikrotik", "ca")
     token_map = redactor.token_map()
     captured: list[object] = []
     built: dict = {}
@@ -515,7 +440,7 @@ def test_run_analysis_payload_uses_tokens_for_hostname_and_user(monkeypatch):
             "hostname": "home-fw",
         })),
     }
-    ctx = AnalysisContext(findings, evidence, load_catalog(), "mikrotik", "ca", [])
+    ctx = AnalysisContext(findings, load_catalog(), "mikrotik", "ca")
     captured: list[object] = []
 
     def capture_model(messages, info):

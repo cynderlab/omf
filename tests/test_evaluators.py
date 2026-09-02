@@ -35,7 +35,7 @@ def test_no_generic_accounts_fail_enabled_admin():
     evidence = {"users": ev("users", UserList(users=(
         User(name="admin", enabled=True, groups=()),
     )))}
-    r = no_generic_accounts(evidence, {"names": ["admin"], "mode": "must_not_exist"}, "mikrotik")
+    r = no_generic_accounts(evidence, {"names": ["admin"]}, "mikrotik")
     assert r.status == "fail"
 
 
@@ -43,7 +43,7 @@ def test_no_generic_accounts_pass_renamed():
     evidence = {"users": ev("users", UserList(users=(
         User(name="alice", enabled=True, groups=()),
     )))}
-    r = no_generic_accounts(evidence, {"names": ["admin"], "mode": "must_be_renamed"}, "fortinet")
+    r = no_generic_accounts(evidence, {"names": ["admin"]}, "fortinet")
     assert r.status == "pass"
 
 
@@ -51,7 +51,7 @@ def test_no_generic_accounts_ignores_disabled_default():
     evidence = {"users": ev("users", UserList(users=(
         User(name="admin", enabled=False, groups=()),
     )))}
-    r = no_generic_accounts(evidence, {"names": ["admin"], "mode": "must_not_exist"}, "mikrotik")
+    r = no_generic_accounts(evidence, {"names": ["admin"]}, "mikrotik")
     assert r.status == "pass"
 
 
@@ -152,6 +152,33 @@ def test_registry_covers_catalog():
     for vendor in ("mikrotik", "fortinet"):
         for check in load_catalog(vendor):
             assert check.evaluator in REGISTRY
+
+
+def test_no_get_evaluator_wrapper():
+    import omf.baseline.evaluators as evaluators
+
+    assert not hasattr(evaluators, "get_evaluator")
+
+
+def test_dead_skip_params_do_not_excuse_interface_any_any():
+    evidence = {"firewall_filter": ev("firewall_filter", PolicyList(policies=(
+        Policy(
+            id="1",
+            enabled=True,
+            action="accept",
+            src=("any",),
+            dst=("any",),
+            service=("any",),
+            in_interface="LAN",
+            out_interface="WAN",
+        ),
+    )))}
+    r = no_any_any_accept(
+        evidence,
+        {"skip_interface_scoped": True, "skip_established_forward": True},
+        "mikrotik",
+    )
+    assert r.status == "fail"
 
 
 def test_evaluate_missing_capability_is_error():

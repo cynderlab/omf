@@ -10,19 +10,9 @@ from omf.baseline.evaluators import evaluate
 from omf.baseline.loader import CheckDef
 from omf.schema.evidence import CheckResult, Evidence
 from omf.log import get_logger
-from omf.store import AuditStore
+from omf.store import AuditStore, _EVENT_FORBIDDEN
 
 _log = get_logger("omf.runner")
-
-_EVENT_FORBIDDEN = frozenset({
-    "host",
-    "url",
-    "username",
-    "password",
-    "token",
-    "authorization",
-    "api_key",
-})
 
 
 @dataclass
@@ -102,18 +92,20 @@ class Runner:
                 result = evaluate(check, collected, self.adapter.vendor)
             findings.append(result)
             _log.info("eval %s -> %s", check.id, result.status)
-            self._emit({
-                "phase": "eval",
-                "check_id": check.id,
-                "status": result.status,
-                "severity": result.severity,
-                "diagnostic": result.diagnostic,
-            })
+            self._emit(
+                {
+                    "phase": "eval",
+                    "check_id": check.id,
+                    "status": result.status,
+                    "severity": result.severity,
+                },
+                extra={"diagnostic": result.diagnostic},
+            )
 
         self.store.write_findings(findings)
         return RunnerResult(findings=findings, collected=collected)
 
-    def _emit(self, event: dict) -> None:
+    def _emit(self, event: dict, extra: dict | None = None) -> None:
         safe = {
             key: value
             for key, value in event.items()
@@ -121,7 +113,10 @@ class Runner:
         }
         self.store.append_event(safe)
         if self.on_event is not None:
-            self.on_event(safe)
+            payload = dict(safe)
+            if extra:
+                payload.update(extra)
+            self.on_event(payload)
 
 
 __all__ = [

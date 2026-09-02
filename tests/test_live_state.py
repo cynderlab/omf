@@ -51,7 +51,7 @@ def test_llm_start_shows_narrative_panel():
     assert "0s" in rendered
 
 
-def test_llm_tool_event_updates_narrative():
+def test_llm_tool_event_does_not_change_narrative():
     state = _LiveState({"FW-ADM-001": "No generic admin"})
     state.handle({"phase": "llm", "status": "start", "model": "demo-model"})
     state.handle({
@@ -62,22 +62,9 @@ def test_llm_tool_event_updates_narrative():
     })
     rendered = _text(state)
     assert "Writing narrative" in rendered
-    assert "opening FW-ADM-001" in rendered
-    assert "last: get_finding" in rendered
-
-
-def test_llm_tool_labels():
-    state = _LiveState({"FW-ADM-001": "x"})
-    state.handle({"phase": "llm", "status": "start", "model": "m"})
-    cases = (
-        ({"tool": "list_findings"}, "reading findings"),
-        ({"tool": "get_redacted_evidence", "capability": "users"}, "reading evidence: users"),
-        ({"tool": "get_mitigation", "check_id": "FW-ADM-001"}, "looking up mitigation"),
-        ({"tool": "submit_report"}, "submitting report"),
-    )
-    for extra, label in cases:
-        state.handle({"phase": "llm", "status": "tool", **extra})
-        assert label in _text(state)
+    assert "thinking" in rendered
+    assert "opening FW-ADM-001" not in rendered
+    assert "last: get_finding" not in rendered
 
 
 def test_narrative_spinner_moves_with_clock():

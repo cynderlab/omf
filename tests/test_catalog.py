@@ -71,11 +71,15 @@ def test_pol002_only_mikrotik():
     assert {"FW-UTM-001", "FW-UTM-007", "FW-FAB-001"} <= ft
 
 
-def test_resolve_admin_mode_differs_by_vendor():
+def test_generic_account_params_are_names_only():
     mt = next(c for c in load_catalog("mikrotik") if c.id == "FW-ADM-001")
     ft = next(c for c in load_catalog("fortinet") if c.id == "FW-ADM-001")
-    assert resolve_params(mt, "mikrotik")["mode"] == "must_not_exist"
-    assert resolve_params(ft, "fortinet")["mode"] == "must_be_renamed"
+    mt_params = resolve_params(mt, "mikrotik")
+    ft_params = resolve_params(ft, "fortinet")
+    assert "mode" not in mt_params
+    assert "mode" not in ft_params
+    assert mt_params["names"] == ["admin"]
+    assert ft_params["names"] == ["admin"]
 
 
 def test_mitigation_falls_back_to_generic():

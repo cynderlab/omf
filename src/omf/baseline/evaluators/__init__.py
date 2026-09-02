@@ -110,10 +110,6 @@ REGISTRY: dict[str, Evaluator] = {
 }
 
 
-def get_evaluator(name: str) -> Evaluator:
-    return REGISTRY[name]
-
-
 def evaluate(
     check: CheckDef,
     evidence: Mapping[str, Evidence],
@@ -153,5 +149,4 @@ __all__ = [
     "REGISTRY",
     "Evaluator",
     "evaluate",
-    "get_evaluator",
 ]

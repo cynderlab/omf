@@ -303,27 +303,13 @@ _PHASE_LABEL = {
 }
 
 _SPIN = ("●○○", "●●○", "●●●", "○●●", "○○●")
-_ACTIVE_LLM = frozenset({"", "start", "retry", "tool"})
+_ACTIVE_LLM = frozenset({"", "start"})
 _TABLE_PHASES = frozenset({"starting", "collect", "eval"})
 _SPAN_KEEP = 6
 
 
 def _short_model(name: str) -> str:
     return name.rsplit("/", 1)[-1] if name else "configured-model"
-
-
-def _tool_label(tool: str, check_id: str = "", capability: str = "") -> str:
-    if tool == "list_findings":
-        return "reading findings"
-    if tool == "get_finding":
-        return f"opening {check_id}" if check_id else "opening finding"
-    if tool == "get_redacted_evidence":
-        return f"reading evidence: {capability}" if capability else "reading evidence"
-    if tool == "get_mitigation":
-        return "looking up mitigation"
-    if tool == "submit_report":
-        return "submitting report"
-    return tool or "thinking"
 
 
 class _LiveState:
@@ -335,9 +321,6 @@ class _LiveState:
         self.llm_model = ""
         self.llm_status = ""
         self.llm_detail = ""
-        self.llm_tool = ""
-        self.llm_tool_check = ""
-        self.llm_tool_cap = ""
         self.llm_spans: list[dict] = []
         self.llm_started_at: float | None = None
         self.rows: dict[str, dict[str, str]] = {
@@ -370,6 +353,8 @@ class _LiveState:
         if status == "span":
             self._push_span(event)
             return
+        if status == "tool":
+            return
         self.llm_status = status
         if event.get("model"):
             self.llm_model = str(event["model"])
@@ -378,18 +363,8 @@ class _LiveState:
         label = self._model_label()
         if status == "start":
             self.llm_started_at = self._now()
-            self.llm_tool = ""
-            self.llm_tool_check = ""
-            self.llm_tool_cap = ""
             self.llm_spans = []
             self.activity = f"generating via {label}"
-        elif status == "tool":
-            self.llm_tool = str(event.get("tool") or "")
-            self.llm_tool_check = str(event.get("check_id") or "")
-            self.llm_tool_cap = str(event.get("capability") or "")
-            self.activity = _tool_label(
-                self.llm_tool, self.llm_tool_check, self.llm_tool_cap
-            )
         elif status == "skipped":
             self.activity = (
                 "evaluation only — skeleton report"
@@ -476,14 +451,9 @@ class _LiveState:
         return table
 
     def _llm_panel(self) -> Panel:
-        label = _tool_label(self.llm_tool, self.llm_tool_check, self.llm_tool_cap)
-        if not self.llm_tool:
-            label = "thinking"
         body = Text()
-        body.append(f"{self._spin()}  {label}\n", style="bold magenta")
+        body.append(f"{self._spin()}  thinking\n", style="bold magenta")
         body.append(f"{self._model_label()} · {self._elapsed_s()}s\n", style="cyan")
-        if self.llm_tool:
-            body.append(f"last: {self.llm_tool}\n", style="dim")
         for span in self.llm_spans:
             duration = f"{span['ms']}ms" if span.get("ms") is not None else "…"
             body.append(f"{duration}  {span['name']}\n", style="dim")
