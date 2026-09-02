@@ -25,8 +25,8 @@ _CATALOG_FIELDS = frozenset({"description"})
 
 _SYSTEM_PROMPT = """You write a configuration audit report in language code: {language}.
 Use only the packed findings in the user message. Adapt catalog descriptions to the redacted evidence.
-Do not invent vendor CLI or API beyond the packed mitigation text.
-State that mitigations are examples and the auditor owns any change.
+Do not invent vendor CLI or API.
+Do not write mitigation or remediation steps; those are assembled locally from the catalog.
 Do not ask for credentials. Do not guess hidden IPs, hostnames, or URLs.
 Do not write a title or metadata block (author, date, target, tool). Those are prepended locally.
 

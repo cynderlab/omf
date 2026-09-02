@@ -339,6 +339,9 @@ def test_system_prompt_requires_packed_narrative():
     assert "list_findings" not in prompt
     assert "get_mitigation" not in prompt
     assert "packed" in prompt.lower()
+    assert "packed mitigation" not in prompt.lower()
+    assert "Do not invent vendor CLI or API" in prompt
+    assert "Do not write mitigation" in prompt
 
 
 def test_system_prompt_forbids_calques_in_ca_es():
