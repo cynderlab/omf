@@ -24,7 +24,7 @@ Do not write mitigation or remediation steps; those are assembled locally from t
 Do not ask for credentials. Do not guess hidden IPs, hostnames, or URLs.
 Do not write a title or metadata block (author, date, target, tool). Those are prepended locally.
 
-Return structured narrative only:
+Return a JSON object with:
 - executive_summary: one short paragraph with scope, fail/pass/error/skipped counts, and main risks.
 - vulnerabilities: one item per fail finding, highest severity first.
   - check_id from the pack
@@ -86,7 +86,7 @@ def _user_prompt(ctx: AnalysisContext, pack: list[dict], counts: dict[str, int])
     payload = {"counts": counts, "fails": pack}
     return (
         "Write the audit narrative from this packed data only. "
-        "Return executive_summary and one vulnerability per fail "
+        "Return a JSON object with executive_summary and one vulnerability per fail "
         f"(title+description in language {ctx.language}).\n"
         + json.dumps(payload, ensure_ascii=False)
     )

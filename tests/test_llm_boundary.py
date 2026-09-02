@@ -526,6 +526,24 @@ def test_complete_openai_appends_chat_completions(monkeypatch):
     assert client.kwargs["trust_env"] is False
 
 
+def test_complete_openai_messages_mention_json(monkeypatch):
+    from omf.agent.llm import _complete, _prompt_for, _user_prompt
+
+    ctx, _ = _ctx()
+    system = _prompt_for(ctx.language)
+    user = _user_prompt(ctx, fail_pack(ctx), status_counts(ctx))
+    body = _narrative_json()
+    client = _install_client(monkeypatch, {
+        "choices": [{"message": {"content": body}}],
+    })
+    out = _complete(_settings(url="http://llm.example.invalid/v1"), system, user)
+    assert out == body
+    blob = json.dumps(client.posts[0]["json"]["messages"]).lower()
+    assert "json" in blob
+    assert "executive_summary" in blob
+    assert "vulnerabilities" in blob
+
+
 def test_complete_openai_does_not_double_append(monkeypatch):
     from omf.agent.llm import _complete
 
