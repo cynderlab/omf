@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from omf.baseline.loader import load_catalog, checks_for, resolve_params, mitigation_for
+from omf.baseline.loader import load_catalog, resolve_params
 
 _TITLE_POLARITY = re.compile(
     r"\b(is set|is enabled|is configured|is present|is denied|is recorded|"
@@ -57,13 +57,13 @@ _MIKROTIK_SEVERITY = {
 
 
 def test_mikrotik_severities_match_audit_scale():
-    by_id = {c.id: c.severity for c in checks_for("mikrotik")}
+    by_id = {c.id: c.severity for c in load_catalog("mikrotik")}
     assert by_id == _MIKROTIK_SEVERITY
 
 
 def test_pol002_only_mikrotik():
-    mt = {c.id for c in checks_for("mikrotik")}
-    ft = {c.id for c in checks_for("fortinet")}
+    mt = {c.id for c in load_catalog("mikrotik")}
+    ft = {c.id for c in load_catalog("fortinet")}
     assert "FW-POL-002" in mt
     assert "FW-POL-002" not in ft
     assert len(mt) == 24
@@ -82,10 +82,9 @@ def test_generic_account_params_are_names_only():
     assert ft_params["names"] == ["admin"]
 
 
-def test_mitigation_falls_back_to_generic():
+def test_mitigation_is_nonempty():
     check = next(c for c in load_catalog("mikrotik") if c.id == "FW-SYS-001")
-    text = mitigation_for(check, "mikrotik")
-    assert text
+    assert check.mitigation
 
 
 def test_fortinet_descriptions_are_present_and_technical():
@@ -115,10 +114,7 @@ def test_mikrotik_adm001_avoids_password_substring():
 
 
 def test_mikrotik_sys002_mitigation_is_auditor_owned():
-    text = mitigation_for(
-        next(c for c in load_catalog("mikrotik") if c.id == "FW-SYS-002"),
-        "mikrotik",
-    )
+    text = next(c for c in load_catalog("mikrotik") if c.id == "FW-SYS-002").mitigation
     assert "check-for-updates" not in text
 
 
@@ -135,7 +131,7 @@ def test_mikrotik_mitigations_include_routeros_cli():
     for check in load_catalog("mikrotik"):
         if check.id not in _MIKROTIK_CLI:
             continue
-        text = mitigation_for(check, "mikrotik")
+        text = check.mitigation
         assert text.strip().startswith("/") or "\n/" in "\n" + text, check.id
         assert "config system" not in text, check.id
 
@@ -162,7 +158,7 @@ def test_fortinet_cis_l1_mitigations_include_cli():
     for check in load_catalog("fortinet"):
         if check.id not in _CIS_L1_FORTINET:
             continue
-        text = mitigation_for(check, "fortinet")
+        text = check.mitigation
         assert "config " in text, check.id
         assert "end" in text, check.id
 
@@ -170,30 +166,30 @@ def test_fortinet_cis_l1_mitigations_include_cli():
 def test_idle_timeout_cli_is_fortinet_only():
     ft = next(c for c in load_catalog("fortinet") if c.id == "FW-ADM-002")
     mt = next(c for c in load_catalog("mikrotik") if c.id == "FW-ADM-002")
-    assert "set admintimeout" in mitigation_for(ft, "fortinet")
-    assert "config system" not in mitigation_for(mt, "mikrotik")
+    assert "set admintimeout" in ft.mitigation
+    assert "config system" not in mt.mitigation
 
 
 def test_new_admin_l1_checks_are_fortinet_only():
     ids = {c.id for c in load_catalog()}
     assert "FW-ADM-004" in ids
-    assert "FW-ADM-004" not in {c.id for c in checks_for("mikrotik")}
-    assert "FW-ADM-004" in {c.id for c in checks_for("fortinet")}
+    assert "FW-ADM-004" not in {c.id for c in load_catalog("mikrotik")}
+    assert "FW-ADM-004" in {c.id for c in load_catalog("fortinet")}
 
 
 def test_catalog_final_counts():
     assert len(load_catalog()) == 63
-    assert len(checks_for("mikrotik")) == 24
-    assert len(checks_for("fortinet")) == 57
+    assert len(load_catalog("mikrotik")) == 24
+    assert len(load_catalog("fortinet")) == 57
     assert {"FW-ADM-006", "FW-ADM-009", "FW-ADM-011", "FW-POL-003"} <= {
-        c.id for c in checks_for("mikrotik")
+        c.id for c in load_catalog("mikrotik")
     }
     assert {
         "FW-L2-001", "FW-L2-002", "FW-SVC-004", "FW-SVC-005", "FW-VPN-001", "FW-SYS-002",
-    } <= {c.id for c in checks_for("mikrotik")}
-    assert "FW-POL-005" not in {c.id for c in checks_for("mikrotik")}
-    assert "FW-UTM-001" not in {c.id for c in checks_for("mikrotik")}
-    assert {c.id for c in checks_for("fortinet")} >= {
+    } <= {c.id for c in load_catalog("mikrotik")}
+    assert "FW-POL-005" not in {c.id for c in load_catalog("mikrotik")}
+    assert "FW-UTM-001" not in {c.id for c in load_catalog("mikrotik")}
+    assert {c.id for c in load_catalog("fortinet")} >= {
         "FW-ADM-004", "FW-SVC-003", "FW-NET-001", "FW-SNMP-003",
         "FW-LOG-003", "FW-LOG-004", "FW-POL-003", "FW-POL-004", "FW-POL-005",
         "FW-LIP-001", "FW-LIP-002", "FW-HA-001", "FW-HA-002",
@@ -204,8 +200,8 @@ def test_catalog_final_counts():
 
 
 def test_fortinet_hygiene_checks_are_low_and_fortinet_only():
-    mt = {c.id for c in checks_for("mikrotik")}
-    by_id = {c.id: c for c in checks_for("fortinet")}
+    mt = {c.id for c in load_catalog("mikrotik")}
+    by_id = {c.id: c for c in load_catalog("fortinet")}
     for check_id in ("FW-POL-006", "FW-POL-007", "FW-OBJ-001"):
         assert check_id not in mt
         assert by_id[check_id].severity == "low"
@@ -214,7 +210,7 @@ def test_fortinet_hygiene_checks_are_low_and_fortinet_only():
 
 
 def test_fortinet_policy_any_any_is_medium_service_all_is_high():
-    by_id = {c.id: c.severity for c in checks_for("fortinet")}
+    by_id = {c.id: c.severity for c in load_catalog("fortinet")}
     assert by_id["FW-POL-001"] == "medium"
     assert by_id["FW-POL-003"] == "high"
 
@@ -236,7 +232,7 @@ _FORTINET_LICENSE_SEVERITY = {
 
 
 def test_fortinet_license_severities_are_medium_except_optional_low():
-    by_id = {c.id: c.severity for c in checks_for("fortinet")}
+    by_id = {c.id: c.severity for c in load_catalog("fortinet")}
     license_ids = {check_id for check_id in by_id if check_id.startswith("FW-LIC-")}
     assert license_ids == set(_FORTINET_LICENSE_SEVERITY)
     for check_id, severity in _FORTINET_LICENSE_SEVERITY.items():
@@ -245,8 +241,8 @@ def test_fortinet_license_severities_are_medium_except_optional_low():
 
 
 def test_fortinet_license_and_lifecycle_checks_are_fortinet_only():
-    mt = {c.id for c in checks_for("mikrotik")}
-    ft = {c.id for c in checks_for("fortinet")}
+    mt = {c.id for c in load_catalog("mikrotik")}
+    ft = {c.id for c in load_catalog("fortinet")}
     assert "FW-LIC-001" in ft
     assert "FW-LIC-001" not in mt
     assert "FW-SYS-002" in ft

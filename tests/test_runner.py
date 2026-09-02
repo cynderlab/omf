@@ -6,7 +6,7 @@ from omf.runner import Runner
 from omf.store import AuditStore
 from omf.schema.capabilities import UserList, User, NtpConfig
 from omf.schema.evidence import Evidence
-from omf.baseline.loader import checks_for
+from omf.baseline.loader import load_catalog
 
 
 class FakeAdapter:

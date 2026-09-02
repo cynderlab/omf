@@ -15,12 +15,8 @@ from omf.vendors import menu_options
 _BASE = Path(__file__).parent
 
 
-def _catalog_text(value: object, vendor: str) -> str:
-    if isinstance(value, dict):
-        raw = value.get(vendor) or value.get("generic") or ""
-    else:
-        raw = value or ""
-    return " ".join(str(raw).split())
+def _one_line(value: object) -> str:
+    return " ".join(str(value or "").split())
 
 
 @dataclass(frozen=True)
@@ -58,9 +54,6 @@ def load_catalog(vendor: str | None = None) -> tuple[CheckDef, ...]:
     raw = _load_yaml(_vendor_dir(vendor) / "catalog.yaml")
     checks: list[CheckDef] = []
     for entry in raw["checks"]:
-        mitigation = entry.get("mitigation") or ""
-        if isinstance(mitigation, dict):
-            mitigation = mitigation.get(vendor) or mitigation.get("generic") or ""
         checks.append(
             CheckDef(
                 id=entry["id"],
@@ -69,8 +62,8 @@ def load_catalog(vendor: str | None = None) -> tuple[CheckDef, ...]:
                 needs=tuple(entry["needs"]),
                 evaluator=entry["evaluator"],
                 params=dict(entry.get("params") or {}),
-                mitigation=str(mitigation),
-                description=_catalog_text(entry.get("description"), vendor),
+                mitigation=str(entry.get("mitigation") or ""),
+                description=_one_line(entry.get("description")),
             )
         )
     return tuple(checks)
@@ -92,19 +85,4 @@ def resolve_params(check: CheckDef, vendor: str) -> dict:
     return merged
 
 
-def checks_for(vendor: str) -> tuple[CheckDef, ...]:
-    return load_catalog(vendor)
-
-
-def mitigation_for(check: CheckDef, vendor: str) -> str:
-    return check.mitigation
-
-
-__all__ = [
-    "CheckDef",
-    "checks_for",
-    "load_catalog",
-    "load_profile",
-    "mitigation_for",
-    "resolve_params",
-]
+__all__ = ["CheckDef", "load_catalog", "load_profile", "resolve_params"]

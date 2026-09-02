@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from omf.baseline.evaluators import evaluate
 from omf.baseline.evaluators.license import license_active
 from omf.baseline.evaluators.system import firmware_supported
-from omf.baseline.loader import checks_for
+from omf.baseline.loader import load_catalog
 from omf.schema.capabilities import LicenseEntitlement, LicenseStatus, SystemInfo
 from omf.schema.evidence import Evidence
 
@@ -149,7 +149,7 @@ def test_license_active_missing_key_is_unlicensed():
 
 
 def test_evaluate_fw_sys_002_uses_profile_table():
-    check = next(c for c in checks_for("fortinet") if c.id == "FW-SYS-002")
+    check = next(c for c in load_catalog("fortinet") if c.id == "FW-SYS-002")
     r = evaluate(check, _system("v7.2.10"), "fortinet")
     assert r.check_id == "FW-SYS-002"
     assert r.status == "fail"
@@ -157,7 +157,7 @@ def test_evaluate_fw_sys_002_uses_profile_table():
 
 
 def test_evaluate_optional_email_license_passes_when_unlicensed():
-    check = next(c for c in checks_for("fortinet") if c.id == "FW-LIC-006")
+    check = next(c for c in load_catalog("fortinet") if c.id == "FW-LIC-006")
     r = evaluate(
         check,
         _licenses(LicenseEntitlement(key="antispam", status="unlicensed")),

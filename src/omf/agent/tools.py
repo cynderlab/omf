@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from omf.baseline.loader import CheckDef, mitigation_for
+from omf.baseline.loader import CheckDef
 
 _EVIDENCE_LIST_CAP = 12
 _STATUS_KEYS = ("fail", "pass", "error", "skipped")
@@ -57,7 +57,7 @@ def _cap_for_model(value: object) -> object:
 def get_mitigation(ctx: AnalysisContext, check_id: str) -> str:
     for check in ctx.checks:
         if check.id == check_id:
-            return mitigation_for(check, ctx.vendor)
+            return check.mitigation
     return ""
 
 

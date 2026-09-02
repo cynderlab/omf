@@ -20,7 +20,7 @@ from omf import DISCLAIMER_TEXT, DISCLAIMER_VERSION
 from omf.adapters.auth import AuthScheme, auth_schemes, scheme_by_id
 from omf.adapters.base import ProbeError, VendorAdapter
 from omf.banner import print_banner
-from omf.baseline.loader import checks_for, load_catalog
+from omf.baseline.loader import load_catalog
 from omf.vendors import build_adapter, get as vendor_spec, ids as vendor_ids
 from omf.connect import (
     CONNECT_ACTIONS,
@@ -91,7 +91,7 @@ def run() -> int:
             return 1
         _remember_target(prefs, session, skip_llm=skip_llm)
         store = AuditStore(Path.cwd() / "audits", session.vendor, datetime.now(timezone.utc))
-        checks = checks_for(session.vendor)
+        checks = load_catalog(session.vendor)
         state = _LiveState({check.id: check.title for check in checks})
         with Live(
             state,

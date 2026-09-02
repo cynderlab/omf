@@ -11,7 +11,7 @@ from omf.adapters.base import VendorAdapter
 from omf.agent.llm import LlmNotConfigured, run_analysis
 from omf.agent.report import finalize_report, skeleton_body
 from omf.agent.tools import AnalysisContext
-from omf.baseline.loader import checks_for
+from omf.baseline.loader import load_catalog
 from omf.config import LlmSettings
 from omf.redactor import Redactor
 from omf.runner import Runner
@@ -58,7 +58,7 @@ def run_audit(
             adapter.probe()
             _forward_last_call(adapter, store, on_event, {"phase": "probe"})
 
-        checks = checks_for(session.vendor)
+        checks = load_catalog(session.vendor)
         result = Runner(
             adapter,
             checks,

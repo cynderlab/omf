@@ -9,7 +9,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from omf.agent.html import render_html_report
-from omf.baseline.loader import CheckDef, mitigation_for
+from omf.baseline.loader import CheckDef
 from omf.redactor import Redactor
 from omf.schema.evidence import CheckResult, Status
 
@@ -274,7 +274,7 @@ def skeleton_body(
         parts.append(f"- **{copy['description']}:** {desc}")
         parts.extend(_format_evidence(finding.observed, copy))
         if check is not None:
-            parts.extend(_format_mitigation(mitigation_for(check, vendor), copy))
+            parts.extend(_format_mitigation(check.mitigation, copy))
         parts.append("")
     return "\n".join(parts) + "\n"
 
@@ -337,7 +337,7 @@ def narrative_body(
         parts.append(f"- **{copy['description']}:** {_vuln_description(finding, check, narr)}")
         parts.extend(_format_evidence(finding.observed, copy))
         if check is not None:
-            parts.extend(_format_mitigation(mitigation_for(check, vendor), copy))
+            parts.extend(_format_mitigation(check.mitigation, copy))
         parts.append("")
     return "\n".join(parts) + "\n"
 

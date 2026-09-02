@@ -9,7 +9,7 @@ from omf.baseline.evaluators.policy import (
 from omf.baseline.evaluators.snmp import no_default_snmp_community, snmp_not_legacy
 from omf.baseline.evaluators.system import firmware_present
 from omf.adapters.mikrotik import mikrotik_filter
-from omf.baseline.loader import checks_for, resolve_params
+from omf.baseline.loader import load_catalog, resolve_params
 from omf.schema.capabilities import (
     AdminSettings,
     Policy,
@@ -214,8 +214,8 @@ def test_unrestricted_accept_skips_established_not_interface_scope():
         )
     )
     evidence = {"firewall_filter": ev("firewall_filter", payload)}
-    pol001 = next(c for c in checks_for("mikrotik") if c.id == "FW-POL-001")
-    pol003 = next(c for c in checks_for("mikrotik") if c.id == "FW-POL-003")
+    pol001 = next(c for c in load_catalog("mikrotik") if c.id == "FW-POL-001")
+    pol003 = next(c for c in load_catalog("mikrotik") if c.id == "FW-POL-003")
     p001 = resolve_params(pol001, "mikrotik")
     p003 = resolve_params(pol003, "mikrotik")
     assert p001.get("skip_established") is True
@@ -297,9 +297,9 @@ def test_operator_filter_any_any_any_hits_even_when_interface_scoped():
         ]
     )
     evidence = {"firewall_filter": ev("firewall_filter", payload)}
-    p001 = resolve_params(next(c for c in checks_for("mikrotik") if c.id == "FW-POL-001"), "mikrotik")
-    p002 = resolve_params(next(c for c in checks_for("mikrotik") if c.id == "FW-POL-002"), "mikrotik")
-    p003 = resolve_params(next(c for c in checks_for("mikrotik") if c.id == "FW-POL-003"), "mikrotik")
+    p001 = resolve_params(next(c for c in load_catalog("mikrotik") if c.id == "FW-POL-001"), "mikrotik")
+    p002 = resolve_params(next(c for c in load_catalog("mikrotik") if c.id == "FW-POL-002"), "mikrotik")
+    p003 = resolve_params(next(c for c in load_catalog("mikrotik") if c.id == "FW-POL-003"), "mikrotik")
     any_any = no_any_any_accept(evidence, p001, "mikrotik")
     service_any = no_unrestricted_service(evidence, p003, "mikrotik")
     hits = ["2", "3", "4", "5", "6", "7", "12", "13", "14"]
@@ -379,6 +379,6 @@ def test_firmware_match_current_ignores_channel_suffix():
 
 
 def test_pol005_not_on_mikrotik():
-    ids = {c.id for c in checks_for("mikrotik")}
+    ids = {c.id for c in load_catalog("mikrotik")}
     assert "FW-POL-005" not in ids
-    assert "FW-POL-005" in {c.id for c in checks_for("fortinet")}
+    assert "FW-POL-005" in {c.id for c in load_catalog("fortinet")}
