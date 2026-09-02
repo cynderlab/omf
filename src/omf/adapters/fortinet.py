@@ -426,17 +426,12 @@ def forti_ha(raw: object) -> HaConfig:
     item = _as_record(_drop_secrets(raw))
     monitors = _tokens(item.get("monitor"))
     mgmt = item.get("ha-mgmt-interfaces")
+    entries = _as_records(mgmt if not isinstance(mgmt, dict) else [mgmt])
     ifaces: list[str] = []
-    for entry in _as_records(mgmt) if not isinstance(mgmt, dict) else [mgmt]:
+    for entry in entries:
         name = entry.get("interface") or entry.get("name")
         if name not in (None, ""):
             ifaces.append(str(name))
-    if isinstance(mgmt, (list, tuple)):
-        for entry in mgmt:
-            if isinstance(entry, dict):
-                name = entry.get("interface") or entry.get("name")
-                if name not in (None, ""):
-                    ifaces.append(str(name))
     mode = str(item.get("mode") or "standalone").strip().lower()
     return HaConfig(
         mode=mode,
