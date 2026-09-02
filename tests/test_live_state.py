@@ -51,22 +51,6 @@ def test_llm_start_shows_narrative_panel():
     assert "0s" in rendered
 
 
-def test_llm_tool_event_does_not_change_narrative():
-    state = _LiveState({"FW-ADM-001": "No generic admin"})
-    state.handle({"phase": "llm", "status": "start", "model": "demo-model"})
-    state.handle({
-        "phase": "llm",
-        "status": "tool",
-        "tool": "get_finding",
-        "check_id": "FW-ADM-001",
-    })
-    rendered = _text(state)
-    assert "Writing narrative" in rendered
-    assert "thinking" in rendered
-    assert "opening FW-ADM-001" not in rendered
-    assert "last: get_finding" not in rendered
-
-
 def test_narrative_spinner_moves_with_clock():
     clock = [10.0]
     state = _LiveState({"FW-ADM-001": "x"}, now=lambda: clock[0])

@@ -352,8 +352,6 @@ class _LiveState:
         if status == "span":
             self._push_span(event)
             return
-        if status == "tool":
-            return
         self.llm_status = status
         if event.get("model"):
             self.llm_model = str(event["model"])
