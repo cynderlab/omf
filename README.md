@@ -27,6 +27,7 @@ How the code works, and how to add a vendor: **[DEVELOPERS.md](DEVELOPERS.md)**.
 | **Author** | [Pere Casas](mailto:pcasas@cynderlab.com) · [Cynderlab](https://cynderlab.com) |
 | **License** | [Elastic License 2.0](LICENSE) — use, copy, modify; no hosted or managed service |
 | **Stack** | Python 3.12+ · [uv](https://docs.astral.sh/uv/) only |
+| **Tested on** | Linux, macOS |
 
 ## Supported products
 
