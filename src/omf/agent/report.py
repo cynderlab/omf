@@ -235,6 +235,36 @@ def _fail_table(
     return rows
 
 
+def _fail_sections(
+    fails: list[CheckResult],
+    by_id: dict[str, CheckDef],
+    copy: dict[str, str],
+    *,
+    titles: dict[str, str] | None = None,
+    descriptions: dict[str, str] | None = None,
+) -> list[str]:
+    title_overlay = titles or {}
+    desc_overlay = descriptions or {}
+    parts: list[str] = []
+    for finding in fails:
+        check = by_id.get(finding.check_id)
+        title = title_overlay.get(finding.check_id) or (check.title if check else "")
+        desc = desc_overlay.get(finding.check_id) or (
+            check.description.strip()
+            if check is not None and check.description.strip()
+            else finding.diagnostic
+        )
+        parts.append(f"### {finding.check_id} — {title}")
+        parts.append("")
+        parts.append(f"- **{copy['severity']}:** {finding.severity}")
+        parts.append(f"- **{copy['description']}:** {desc}")
+        parts.extend(_format_evidence(finding.observed, copy))
+        if check is not None:
+            parts.extend(_format_mitigation(check.mitigation, copy))
+        parts.append("")
+    return parts
+
+
 def skeleton_body(
     findings: list[CheckResult],
     checks: tuple[CheckDef, ...],
@@ -259,23 +289,8 @@ def skeleton_body(
         "",
         f"## {copy['vulns']}",
         "",
+        *_fail_sections(fails, by_id, copy),
     ]
-    for finding in fails:
-        check = by_id.get(finding.check_id)
-        title = check.title if check else ""
-        parts.append(f"### {finding.check_id} — {title}")
-        parts.append("")
-        parts.append(f"- **{copy['severity']}:** {finding.severity}")
-        desc = (
-            check.description.strip()
-            if check is not None and check.description.strip()
-            else finding.diagnostic
-        )
-        parts.append(f"- **{copy['description']}:** {desc}")
-        parts.extend(_format_evidence(finding.observed, copy))
-        if check is not None:
-            parts.extend(_format_mitigation(check.mitigation, copy))
-        parts.append("")
     return "\n".join(parts) + "\n"
 
 
@@ -318,6 +333,12 @@ def narrative_body(
         finding.check_id: _vuln_title(finding, by_id.get(finding.check_id), by_narr.get(finding.check_id))
         for finding in fails
     }
+    descriptions = {
+        finding.check_id: _vuln_description(
+            finding, by_id.get(finding.check_id), by_narr.get(finding.check_id)
+        )
+        for finding in fails
+    }
     parts = [
         f"## {copy['exec']}",
         "",
@@ -327,18 +348,8 @@ def narrative_body(
         "",
         f"## {copy['vulns']}",
         "",
+        *_fail_sections(fails, by_id, copy, titles=titles, descriptions=descriptions),
     ]
-    for finding in fails:
-        check = by_id.get(finding.check_id)
-        narr = by_narr.get(finding.check_id)
-        parts.append(f"### {finding.check_id} — {_vuln_title(finding, check, narr)}")
-        parts.append("")
-        parts.append(f"- **{copy['severity']}:** {finding.severity}")
-        parts.append(f"- **{copy['description']}:** {_vuln_description(finding, check, narr)}")
-        parts.extend(_format_evidence(finding.observed, copy))
-        if check is not None:
-            parts.extend(_format_mitigation(check.mitigation, copy))
-        parts.append("")
     return "\n".join(parts) + "\n"
 
 
