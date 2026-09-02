@@ -20,20 +20,6 @@ class AnalysisContext:
     transcript: str = ""
 
 
-def get_finding(ctx: AnalysisContext, check_id: str) -> dict:
-    by_id = {check.id: check for check in ctx.checks}
-    for finding in ctx.findings:
-        if finding.get("check_id") == check_id:
-            capped = _cap_for_model(finding)
-            if not isinstance(capped, dict):
-                return {}
-            check = by_id.get(check_id)
-            if check is not None and check.description.strip():
-                capped["description"] = check.description
-            return capped
-    return {}
-
-
 def _cap_for_model(value: object) -> object:
     """Trim large lists so the model is not fed a full policy dump."""
     if isinstance(value, dict):
@@ -54,13 +40,6 @@ def _cap_for_model(value: object) -> object:
     return value
 
 
-def get_mitigation(ctx: AnalysisContext, check_id: str) -> str:
-    for check in ctx.checks:
-        if check.id == check_id:
-            return check.mitigation
-    return ""
-
-
 def status_counts(ctx: AnalysisContext) -> dict[str, int]:
     counts = {key: 0 for key in _STATUS_KEYS}
     for finding in ctx.findings:
@@ -71,6 +50,7 @@ def status_counts(ctx: AnalysisContext) -> dict[str, int]:
 
 
 def fail_pack(ctx: AnalysisContext) -> list[dict]:
+    by_id = {check.id: check for check in ctx.checks}
     fails = [finding for finding in ctx.findings if finding.get("status") == "fail"]
     fails.sort(
         key=lambda finding: (
@@ -83,9 +63,11 @@ def fail_pack(ctx: AnalysisContext) -> list[dict]:
         check_id = finding.get("check_id")
         if not isinstance(check_id, str):
             continue
-        row = get_finding(ctx, check_id)
-        if not row:
+        row = _cap_for_model(finding)
+        if not isinstance(row, dict):
             continue
-        row["mitigation"] = get_mitigation(ctx, check_id)
+        check = by_id.get(check_id)
+        if check is not None and check.description.strip():
+            row["description"] = check.description
         pack.append(row)
     return pack

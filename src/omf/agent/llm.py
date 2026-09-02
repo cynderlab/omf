@@ -21,7 +21,7 @@ from omf.redactor import leak_hits
 
 _log = get_logger("omf.agent.llm")
 _LLM_TIMEOUT = httpx.Timeout(120.0, connect=15.0)
-_CATALOG_FIELDS = frozenset({"description", "mitigation"})
+_CATALOG_FIELDS = frozenset({"description"})
 
 _SYSTEM_PROMPT = """You write a configuration audit report in language code: {language}.
 Use only the packed findings in the user message. Adapt catalog descriptions to the redacted evidence.

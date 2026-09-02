@@ -2,8 +2,6 @@ import json
 from omf.agent.tools import (
     AnalysisContext,
     fail_pack,
-    get_finding,
-    get_mitigation,
     status_counts,
 )
 from omf.baseline.loader import CheckDef, load_catalog
@@ -23,7 +21,7 @@ def _ctx():
     return AnalysisContext(findings, load_catalog(), "mikrotik", "ca"), r
 
 
-def test_get_finding_caps_long_observed_lists():
+def test_fail_pack_caps_long_observed_lists():
     policies = [
         {"id": str(i), "src": ["any"], "dst": ["any"], "service": ["any"], "action": "accept"}
         for i in range(40)
@@ -42,13 +40,14 @@ def test_get_finding_caps_long_observed_lists():
         "fortinet",
         "en",
     )
-    finding = get_finding(ctx, "FW-POL-001")
+    finding = fail_pack(ctx)[0]
     listed = finding["observed"]["policies"]
     assert len(listed) == 12
     assert finding["observed"]["policies_total"] == 40
     assert finding["observed"]["policies_truncated"] is True
     blob = json.dumps(finding)
     assert '"id": "30"' not in blob
+    assert "mitigation" not in finding
 
 
 def test_model_for_sets_http_timeout():
@@ -61,18 +60,19 @@ def test_model_for_sets_http_timeout():
     assert timeout.read == _LLM_TIMEOUT.read
 
 
-def test_tools_return_redacted_only():
+def test_fail_pack_returns_redacted_only():
     ctx, r = _ctx()
-    finding = get_finding(ctx, "FW-ADM-001")
-    blob = json.dumps({"finding": finding, "mit": get_mitigation(ctx, "FW-ADM-001")})
+    pack = fail_pack(ctx)
+    blob = json.dumps(pack)
     assert "token_map" not in blob
     assert "password" not in blob
     assert "192." not in blob
     dumped = json.dumps(r.token_map())
     assert dumped not in blob
+    assert "mitigation" not in pack[0]
 
 
-def test_get_finding_includes_catalog_description():
+def test_fail_pack_includes_catalog_description():
     check = CheckDef(
         "FW-ADM-001",
         "Default admin username",
@@ -96,17 +96,11 @@ def test_get_finding_includes_catalog_description():
         "fortinet",
         "en",
     )
-    finding = get_finding(ctx, "FW-ADM-001")
+    finding = fail_pack(ctx)[0]
     assert finding["description"] == "The factory FortiOS administrator is named admin."
     assert finding["diagnostic"] == "enabled user matches vendor default name 'admin'"
     assert finding["observed"] == {"names": ["admin"]}
-
-
-def test_get_mitigation_returns_catalog_text():
-    ctx, _ = _ctx()
-    text = get_mitigation(ctx, "FW-ADM-001")
-    assert "admin" in text.lower()
-    assert get_mitigation(ctx, "NO-SUCH") == ""
+    assert "mitigation" not in finding
 
 
 def test_fail_pack_is_fails_only_and_capped():
@@ -147,7 +141,7 @@ def test_fail_pack_is_fails_only_and_capped():
     assert pack[1]["severity"] == "low"
     assert len(pack[0]["observed"]["policies"]) == 12
     assert pack[0]["observed"]["policies_total"] == 40
-    assert "mitigation" in pack[0] and pack[0]["mitigation"]
+    assert "mitigation" not in pack[0]
     assert "description" in pack[0] and pack[0]["description"]
     assert status_counts(ctx) == {"fail": 2, "pass": 1, "error": 0, "skipped": 0}
 
@@ -159,6 +153,8 @@ def test_no_function_tool_helpers():
     assert not hasattr(tools, "list_findings")
     assert not hasattr(tools, "get_redacted_evidence")
     assert not hasattr(tools, "submit_report")
+    assert not hasattr(tools, "get_finding")
+    assert not hasattr(tools, "get_mitigation")
 
 
 def _narrative_response(
