@@ -17,3 +17,8 @@ def test_clear_secrets_wipes_creds_keeps_url():
     assert s.username == ""
     assert s.url == "https://192.0.2.1"
     assert s.vendor == "mikrotik"
+
+
+def test_default_report_mode_is_llm():
+    s = Session("mikrotik", "https://x", "", "", "", True, "en")
+    assert s.report_mode == "llm"

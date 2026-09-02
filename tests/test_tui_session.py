@@ -39,16 +39,16 @@ def test_prompt_session_does_not_ask_tls_and_defaults_off(monkeypatch):
     )
 
     prefs = UserPrefs(True, 1, "ca", "mikrotik", "https://192.0.2.1", "admin")
-    session, skip_llm = _prompt_session(
+    session = _prompt_session(
         Console(quiet=True), prefs, llm_configured=True
     )
     assert session.verify_tls is False
-    assert skip_llm is False
+    assert session.report_mode == "llm"
     assert confirms == []
 
 
 def test_prompt_report_mode_defaults_to_eval_when_llm_missing():
-    assert _prompt_report_mode(llm_configured=False, ask=lambda: "eval") is True
+    assert _prompt_report_mode(llm_configured=False, ask=lambda: "eval") == "eval"
 
 
 def test_prompt_report_mode_defaults_argument_when_llm_configured(monkeypatch):
@@ -59,7 +59,7 @@ def test_prompt_report_mode_defaults_argument_when_llm_configured(monkeypatch):
         return "llm"
 
     monkeypatch.setattr("omf.tui.select_value", fake_select)
-    assert _prompt_report_mode(llm_configured=True) is False
+    assert _prompt_report_mode(llm_configured=True) == "llm"
     assert seen["default"] == "llm"
 
 
@@ -72,7 +72,7 @@ def test_prompt_report_mode_defaults_eval_when_unconfigured(monkeypatch):
         return "eval"
 
     monkeypatch.setattr("omf.tui.select_value", fake_select)
-    assert _prompt_report_mode(llm_configured=False) is True
+    assert _prompt_report_mode(llm_configured=False) == "eval"
     assert seen["default"] == "eval"
     assert seen["message"] == "Report"
 
@@ -85,7 +85,7 @@ def test_prompt_report_mode_prefers_saved_choice(monkeypatch):
         return "eval"
 
     monkeypatch.setattr("omf.tui.select_value", fake_select)
-    assert _prompt_report_mode(llm_configured=True, last_report_mode="eval") is True
+    assert _prompt_report_mode(llm_configured=True, last_report_mode="eval") == "eval"
     assert seen["default"] == "eval"
 
 
@@ -109,11 +109,11 @@ def test_prompt_session_returns_skip_llm(monkeypatch):
         lambda *args, **kwargs: {"username": "admin", "password": "x", "token": ""},
     )
     prefs = UserPrefs(True, 1, "es", "mikrotik", "https://192.0.2.1", "admin")
-    session, skip_llm = _prompt_session(
+    session = _prompt_session(
         Console(quiet=True), prefs, llm_configured=False
     )
     assert session.vendor == "mikrotik"
-    assert skip_llm is True
+    assert session.report_mode == "eval"
     assert session.report_language == "en"
 
 
@@ -140,10 +140,10 @@ def test_prompt_session_asks_language_only_for_llm_narrative(monkeypatch):
         lambda *args, **kwargs: {"username": "admin", "password": "x", "token": ""},
     )
     prefs = UserPrefs(True, 1, "ca", "mikrotik", "https://192.0.2.1", "admin")
-    session, skip_llm = _prompt_session(
+    session = _prompt_session(
         Console(quiet=True), prefs, llm_configured=True
     )
-    assert skip_llm is False
+    assert session.report_mode == "llm"
     assert session.report_language == "en"
     assert seen == ["Vendor", "Report", "Report language"]
 

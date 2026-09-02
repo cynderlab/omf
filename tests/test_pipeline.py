@@ -165,11 +165,11 @@ def test_skip_llm_with_configured_model_does_not_call_analysis(tmp_path: Path, m
         raise AssertionError("run_analysis must not be called when skip_llm=True")
 
     monkeypatch.setattr("omf.pipeline.run_analysis", boom)
-    session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "tokentok", True, "ca")
+    session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "tokentok", True, "ca", "eval")
     store = AuditStore(tmp_path, "mikrotik", datetime.now(timezone.utc))
     llm = LlmSettings("http://llm.example", "sk-live", "model", "openai")
     events = []
-    report = run_audit(session, store, FullFake(), llm, events.append, skip_llm=True)
+    report = run_audit(session, store, FullFake(), llm, events.append)
     text = report.read_text()
     assert "Narrative skipped" in text
     assert '"fail"' in (store.path / "findings.json").read_text()
@@ -194,11 +194,11 @@ def test_skip_llm_without_llm_env_still_collects_and_evaluates(tmp_path: Path, m
         raise AssertionError("run_analysis must not be called when skip_llm=True")
 
     monkeypatch.setattr("omf.pipeline.run_analysis", boom)
-    session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "", True, "en")
+    session = Session("mikrotik", "https://192.0.2.8", "admin", "s3cret", "", True, "en", "eval")
     store = AuditStore(tmp_path, "mikrotik", datetime.now(timezone.utc))
     llm = LlmSettings(None, None, None, "openai")
     events = []
-    report = run_audit(session, store, FullFake(), llm, events.append, skip_llm=True)
+    report = run_audit(session, store, FullFake(), llm, events.append)
     assert report == store.path / "report.html"
     text = report.read_text()
     assert "Narrative skipped" in text

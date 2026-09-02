@@ -32,17 +32,17 @@ def run_audit(
     on_event: Callable[[dict], None],
     *,
     skip_probe: bool = False,
-    skip_llm: bool = False,
 ) -> Path:
     """probe, run, redact, write redacted/ + token_map, write report.html.
     Never writes session.url to meta.json.
-    skip_llm=True skips the model and writes the skeleton; collect/eval/redact still run.
+    session.report_mode == "eval" skips the model and writes the skeleton; collect/eval/redact still run.
     On LlmNotConfigured or analysis failure after retry: skeleton_body.
     Always session.clear_secrets() in a finally block.
     Returns path to report.html.
     """
     try:
         started_at = _started_at(store)
+        skip_llm = session.report_mode == "eval"
         # Evaluation-only: catalog/skeleton are English; language is LLM narrative only.
         report_language = "en" if skip_llm else session.report_language
         store.write_meta({
@@ -93,7 +93,6 @@ def run_audit(
             checks=checks,
             findings=result.findings,
             redacted_findings=redacted_findings,
-            skip_llm=skip_llm,
             report_language=report_language,
         )
         report = finalize_report(
@@ -125,8 +124,8 @@ def _analysis_body(
     findings,
     redacted_findings,
     report_language: str,
-    skip_llm: bool = False,
 ) -> str:
+    skip_llm = session.report_mode == "eval"
     model = llm.model or ""
     style = llm.api_style
     if skip_llm or not llm.is_configured():

@@ -106,7 +106,8 @@ def test_remember_does_not_blank_saved_username(tmp_path, monkeypatch):
     monkeypatch.setattr("omf.tui._CONFIG_DIR", tmp_path)
     prefs = UserPrefs(True, 1, "ca", "mikrotik", last_url="http://192.168.1.1", last_username="reader")
     session = Session("mikrotik", "http://192.168.1.1", "", "", "", False, "ca")
-    _remember_target(prefs, session, skip_llm=True)
+    session.report_mode = "eval"
+    _remember_target(prefs, session)
     assert prefs.last_username == "reader"
     assert prefs.last_report_mode == "eval"
 
@@ -118,7 +119,8 @@ def test_remember_eval_does_not_overwrite_report_language(tmp_path, monkeypatch)
     monkeypatch.setattr("omf.tui._CONFIG_DIR", tmp_path)
     prefs = UserPrefs(True, 1, "ca", "mikrotik", last_url="http://192.168.1.1", last_username="reader")
     session = Session("mikrotik", "http://192.168.1.1", "", "", "", False, "en")
-    _remember_target(prefs, session, skip_llm=True)
+    session.report_mode = "eval"
+    _remember_target(prefs, session)
     assert prefs.default_report_language == "ca"
     assert prefs.last_report_mode == "eval"
 

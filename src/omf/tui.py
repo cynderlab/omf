@@ -79,17 +79,17 @@ def run() -> int:
     audit_started = False
     try:
         llm = load_llm_settings(Path.cwd(), _CONFIG_DIR)
-        session, skip_llm = _prompt_session(
+        session = _prompt_session(
             console, prefs, llm_configured=llm.is_configured()
         )
-        _remember_target(prefs, session, skip_llm=skip_llm)
+        _remember_target(prefs, session)
         notice = vendor_spec(session.vendor).tls_notice
         if notice and not session.verify_tls:
             console.print(f"[dim]{notice}[/dim]")
-        adapter = _connect_with_retry(console, session, prefs, skip_llm=skip_llm)
+        adapter = _connect_with_retry(console, session, prefs)
         if adapter is None:
             return 1
-        _remember_target(prefs, session, skip_llm=skip_llm)
+        _remember_target(prefs, session)
         store = AuditStore(Path.cwd() / "audits", session.vendor, datetime.now(timezone.utc))
         checks = load_catalog(session.vendor)
         state = _LiveState({check.id: check.title for check in checks})
@@ -105,7 +105,7 @@ def run() -> int:
 
             audit_started = True
             report = run_audit(
-                session, store, adapter, llm, on_event, skip_probe=True, skip_llm=skip_llm
+                session, store, adapter, llm, on_event, skip_probe=True
             )
         _print_results(console, state, report)
         return 0
@@ -120,7 +120,7 @@ def run() -> int:
 
 
 def _connect_with_retry(
-    console: Console, session: Session, prefs: UserPrefs, *, skip_llm: bool
+    console: Console, session: Session, prefs: UserPrefs
 ) -> VendorAdapter | None:
     while True:
         adapter = build_adapter(session)
@@ -152,7 +152,7 @@ def _connect_with_retry(
                     parse_url,
                     session.url,
                 )
-            _remember_target(prefs, session, skip_llm=skip_llm)
+            _remember_target(prefs, session)
             continue
         _log.info("connected vendor=%s", session.vendor)
         console.print(f"[green]Connected to {session.url}[/green]")
@@ -161,18 +161,17 @@ def _connect_with_retry(
 
 def _prompt_report_mode(
     *, llm_configured: bool, last_report_mode: str | None = None, ask=None
-) -> bool:
+) -> str:
     if last_report_mode in {"eval", "llm"}:
         default = last_report_mode
     else:
         default = "eval" if not llm_configured else "llm"
-    mode = select_value("Report", REPORT_MODE_OPTIONS, default, ask=ask)
-    return mode == "eval"
+    return select_value("Report", REPORT_MODE_OPTIONS, default, ask=ask)
 
 
 def _prompt_session(
     console: Console, prefs: UserPrefs, *, llm_configured: bool
-) -> tuple[Session, bool]:
+) -> Session:
     vendor = select_value("Vendor", VENDOR_OPTIONS, prefs.last_vendor)
     spec = vendor_spec(vendor)
     if spec.hint:
@@ -182,10 +181,10 @@ def _prompt_session(
         _resolve_auth_scheme(vendor),
         default_username=prefs.last_username or "",
     )
-    skip_llm = _prompt_report_mode(
+    report_mode = _prompt_report_mode(
         llm_configured=llm_configured, last_report_mode=prefs.last_report_mode
     )
-    if skip_llm:
+    if report_mode == "eval":
         language = "en"
     else:
         language = select_value(
@@ -201,7 +200,8 @@ def _prompt_session(
         creds["token"],
         spec.tls_verify,
         language,
-    ), skip_llm
+        report_mode,
+    )
 
 
 def _resolve_auth_scheme(vendor: str) -> AuthScheme:
@@ -216,14 +216,14 @@ def _resolve_auth_scheme(vendor: str) -> AuthScheme:
     return scheme_by_id(vendor, selected)
 
 
-def _remember_target(prefs: UserPrefs, session: Session, *, skip_llm: bool) -> None:
+def _remember_target(prefs: UserPrefs, session: Session) -> None:
     prefs.last_vendor = session.vendor
     prefs.last_url = session.url
     if session.username:
         prefs.last_username = session.username
-    if not skip_llm:
+    if session.report_mode == "llm":
         prefs.default_report_language = session.report_language
-    prefs.last_report_mode = "eval" if skip_llm else "llm"
+    prefs.last_report_mode = session.report_mode
     save_user_prefs(_CONFIG_DIR, prefs)
 
 

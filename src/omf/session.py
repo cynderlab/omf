@@ -15,6 +15,7 @@ class Session:
     token: str
     verify_tls: bool
     report_language: Literal["ca", "es", "en"]
+    report_mode: Literal["eval", "llm"] = "llm"
 
     def clear_secrets(self) -> None:
         self.username = ""
