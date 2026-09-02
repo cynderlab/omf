@@ -21,7 +21,7 @@ TUI (Rich, EN)  →  Session (RAM)  →  Runner (no LLM)  →  Vendor adapter
           (catalog, connect, TLS)            ▼
                                          Redactor
                                              │
-                         └────────►  Analysis agent (Pydantic AI)
+                         └────────►  Analysis agent (one-shot httpx JSON completion)
                                      one-shot fail pack + narrative
                                      NO collect / NO network
 ```
@@ -228,7 +228,7 @@ The redactor is vendor-agnostic and runs **once** after collect/eval. Adapters d
 - After the tree walk, rewrite every already-seen original in remaining strings so the same value is always the same token.
 - Redact URLs **before** hostnames so the host inside a URL is not double-tokenized.
 
-The analysis agent (Pydantic AI) has no adapter, no session, no `token_map`, and no function tools. The kernel injects a redacted, list-capped fail pack plus status counts. The model returns structured narrative (executive summary + per-fail title/description). `narrative_body` stitches catalog evidence tables and mitigations locally. `build_agent` must not hang session or `token_map` on the agent.
+The analysis agent (one-shot httpx JSON completion) has no adapter, no session, no `token_map`, and no function tools. The kernel injects a redacted, list-capped fail pack plus status counts. The model returns structured narrative (executive summary + per-fail title/description). `narrative_body` stitches catalog evidence tables and mitigations locally. `run_analysis` must not take session or `token_map`.
 
 Keep `tests/test_llm_boundary.py` true: one model request; payloads contain no URL, password, key, `raw/`, or `token_map`.
 

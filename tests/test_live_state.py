@@ -32,6 +32,22 @@ def _live_text(state: _LiveState, *, height: int = 20) -> str:
     return console.export_text()
 
 
+def test_llm_span_event_is_ignored():
+    state = _LiveState({"FW-ADM-001": "x"})
+    state.handle({"phase": "llm", "status": "start", "model": "m"})
+    state.handle({
+        "phase": "llm",
+        "status": "span",
+        "name": "chat demo-model",
+        "state": "start",
+    })
+    rendered = _text(state)
+    assert "chat demo-model" not in rendered
+    assert "thinking" in rendered
+    assert not hasattr(state, "llm_spans")
+    assert not hasattr(state, "_push_span")
+
+
 def test_llm_start_shows_narrative_panel():
     state = _LiveState({"FW-ADM-001": "No generic admin"})
     state.handle({

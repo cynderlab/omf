@@ -1,4 +1,4 @@
-"""Pydantic AI analysis agent. No adapter, session, or token_map."""
+"""One-shot httpx JSON analysis. No adapter, session, or token_map."""
 
 from __future__ import annotations
 
@@ -6,15 +6,9 @@ import json
 from collections.abc import Callable
 
 import httpx
-from pydantic_ai import Agent, capture_run_messages
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.openai import OpenAIProvider
 
 from omf.agent.report import ReportNarrative, narrative_body
 from omf.agent.tools import AnalysisContext, fail_pack, status_counts
-from omf.agent.trace import format_transcript, instrumentation_settings
 from omf.config import LlmSettings
 from omf.log import debug_enabled, get_logger
 from omf.redactor import leak_hits
@@ -98,38 +92,68 @@ def _user_prompt(ctx: AnalysisContext, pack: list[dict], counts: dict[str, int])
     )
 
 
-def _http_client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(timeout=_LLM_TIMEOUT)
+def _strip_secret(text: str, secret: str | None) -> str:
+    if secret:
+        return text.replace(secret, "[STRIPPED]")
+    return text
 
 
-def _model_for(settings: LlmSettings):
-    model_name = settings.model or ""
-    if settings.api_style == "anthropic":
-        return AnthropicModel(
-            model_name,
-            provider=AnthropicProvider(
-                api_key=settings.api_key,
-                base_url=settings.base_url,
-                http_client=_http_client(),
-            ),
-        )
-    return OpenAIChatModel(
-        model_name,
-        provider=OpenAIProvider(
-            api_key=settings.api_key,
-            base_url=settings.base_url,
-            http_client=_http_client(),
-        ),
-    )
+def _endpoint(base_url: str, suffix: str) -> str:
+    url = base_url.rstrip("/")
+    if not url.endswith(suffix):
+        url = f"{url}{suffix}"
+    return url
 
 
-def build_agent(ctx: AnalysisContext, settings: LlmSettings) -> Agent:
-    return Agent(
-        _model_for(settings),
-        system_prompt=_prompt_for(ctx.language, _target_noun(ctx.vendor)),
-        output_type=ReportNarrative,
-        name="omf_analysis",
-    )
+def _complete(settings: LlmSettings, system: str, user: str) -> str:
+    style = settings.api_style
+    base = settings.base_url or ""
+    if style == "anthropic":
+        url = _endpoint(base, "/v1/messages")
+        headers = {
+            "x-api-key": settings.api_key or "",
+            "anthropic-version": "2023-06-01",
+        }
+        payload: dict = {
+            "model": settings.model,
+            "max_tokens": 8192,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        }
+    else:
+        url = _endpoint(base, "/chat/completions")
+        headers = {"Authorization": f"Bearer {settings.api_key or ''}"}
+        payload = {
+            "model": settings.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+    with httpx.Client(timeout=_LLM_TIMEOUT, trust_env=False) as client:
+        response = client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+    if style == "anthropic":
+        text = data["content"][0]["text"]
+    else:
+        text = data["choices"][0]["message"]["content"]
+    if not isinstance(text, str):
+        raise RuntimeError("LLM response content is not text")
+    return text
+
+
+def _keep_transcript(
+    ctx: AnalysisContext,
+    system: str,
+    user: str,
+    raw: str,
+    secret: str | None,
+) -> None:
+    ctx.transcript = _strip_secret(f"{system}\n{user}\n{raw}", secret)
+    if debug_enabled():
+        _log.debug("%s", ctx.transcript)
 
 
 def run_analysis(
@@ -137,6 +161,7 @@ def run_analysis(
     settings: LlmSettings,
     on_event: Callable[[dict], None] | None = None,
 ) -> str:
+    del on_event
     if not settings.is_configured():
         raise LlmNotConfigured("LLM base_url, api_key, and model are required")
 
@@ -155,52 +180,23 @@ def run_analysis(
             f"redacted payload still contains identifiers ({leaks[0]})"
         )
 
-    agent = build_agent(ctx, settings)
-    if on_event is not None:
-        agent.instrument = instrumentation_settings(on_event)
-
+    system = _prompt_for(ctx.language, _target_noun(ctx.vendor))
+    user = _user_prompt(ctx, pack, counts)
     last_exc: BaseException | None = None
-    messages: list = []
-    prompt = _user_prompt(ctx, pack, counts)
     for _ in range(2):
         try:
-            with capture_run_messages() as messages:
-                result = agent.run_sync(prompt)
-            _keep_transcript(ctx, messages, settings.api_key)
-            output = result.output
-            if not isinstance(output, ReportNarrative):
-                last_exc = RuntimeError("agent did not return a report narrative")
-                continue
-            usage = getattr(result, "usage", None)
-            if callable(usage):
-                usage = usage()
-            _log.info("llm done requests=%s", getattr(usage, "requests", None))
+            raw = _complete(settings, system, user)
+            _keep_transcript(ctx, system, user, raw, settings.api_key)
+            narrative = ReportNarrative.model_validate(json.loads(raw))
+            _log.info("llm done")
             return narrative_body(
-                output,
+                narrative,
                 ctx.findings,
                 ctx.checks,
                 ctx.vendor,
                 language=ctx.language,
             )
         except Exception as exc:
-            _keep_transcript(ctx, messages, settings.api_key)
             last_exc = exc
     assert last_exc is not None
     raise last_exc
-
-
-def _keep_transcript(ctx: AnalysisContext, messages: list, secret: str | None) -> None:
-    if not messages:
-        return
-    text = format_transcript(messages, secret=secret, max_part=None)
-    system = _prompt_for(ctx.language, _target_noun(ctx.vendor))
-    if system not in text:
-        text = f"SystemPromptPart {system}\n{text}"
-    ctx.transcript = text
-    _dump_transcript(messages, secret)
-
-
-def _dump_transcript(messages: list, secret: str | None) -> None:
-    if not debug_enabled() or not messages:
-        return
-    _log.debug("%s", format_transcript(messages, secret=secret))

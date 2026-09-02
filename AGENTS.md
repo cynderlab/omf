@@ -35,7 +35,7 @@ TUI (Rich, EN)  →  Session (RAM)  →  Runner (no LLM)  →  Vendor adapter
           (catalog, connect, TLS)            ▼
                                          Redactor
                                              │
-                         └────────►  Analysis agent (Pydantic AI)
+                         └────────►  Analysis agent (one-shot httpx JSON completion)
                                      one-shot fail pack + narrative
                                      NO collect / NO network
 ```
@@ -174,9 +174,9 @@ After the model returns structured narrative, destokenize the stitched Markdown 
 
 ## Analysis agent
 
-Pydantic AI. No function tools, no collect, no network, no session, no `token_map`. The kernel injects a redacted, list-capped fail pack plus status counts. The model returns structured narrative (executive summary + per-fail title/description). `narrative_body` stitches catalog evidence tables and mitigations locally. After destokenize, `finalize_report` builds HTML (dashboard from findings + escaped Markdown body).
+One-shot httpx JSON completion. No function tools, no collect, no network to the target, no session, no `token_map`. The kernel injects a redacted, list-capped fail pack plus status counts. The model returns structured narrative (executive summary + per-fail title/description). `narrative_body` stitches catalog evidence tables and mitigations locally. After destokenize, `finalize_report` builds HTML (dashboard from findings + escaped Markdown body).
 
-Keep `tests/test_llm_boundary.py` true: one model request; payloads contain no URL, password, key, `raw`, or `token_map`. `build_agent` must not hang session or `token_map` on the agent.
+Keep `tests/test_llm_boundary.py` true: one model request; payloads contain no URL, password, key, `raw`, or `token_map`. `run_analysis` must not take session or `token_map`.
 
 ## Tests
 
@@ -214,7 +214,7 @@ Ship catalog YAML in the wheel (`[tool.hatch.build] include = ["src/omf/**/*.yam
 - **Missing FortiOS `trusthost*` keys mean `listen=unknown`**, not `restricted`. Empty trusthost or `0.0.0.0/0` is `all`.
 - **Redact URLs before hostnames** so the host inside a URL is not double-tokenized. Match IPv4-tail IPv6 forms before dotted quads.
 - **TUI events: path only.** Adapter `last_call` must not carry host, query secrets, or `Authorization`.
-- **`leak_hits` skips catalog fields.** `fail_pack` attaches description/mitigation. Those may contain `0.0.0.0/0`, `::/0`, or FortiGuard anycast. Scan diagnostic/observed only.
+- **`leak_hits` skips catalog fields.** `fail_pack` attaches description (not mitigation). Those may contain `0.0.0.0/0`, `::/0`, or FortiGuard anycast. Scan diagnostic/observed only.
 - **`config.yaml` is YAML, not TOML.** LLM stays in `.env`.
 - Bump `DISCLAIMER_VERSION` when `DISCLAIMER_TEXT` changes so the prompt is shown again.
 - **HA password** is stripped from Fortinet `raw/` and `HaConfig` before persist. Do not put `password` / `passwd` / `secret` from `system ha` into evidence.

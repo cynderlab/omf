@@ -304,7 +304,6 @@ _PHASE_LABEL = {
 _SPIN = ("●○○", "●●○", "●●●", "○●●", "○○●")
 _ACTIVE_LLM = frozenset({"", "start"})
 _TABLE_PHASES = frozenset({"starting", "collect", "eval"})
-_SPAN_KEEP = 6
 
 
 def _short_model(name: str) -> str:
@@ -320,7 +319,6 @@ class _LiveState:
         self.llm_model = ""
         self.llm_status = ""
         self.llm_detail = ""
-        self.llm_spans: list[dict] = []
         self.llm_started_at: float | None = None
         self.rows: dict[str, dict[str, str]] = {
             check_id: {"status": "", "diagnostic": "", "severity": ""}
@@ -350,7 +348,6 @@ class _LiveState:
     def _handle_llm(self, event: dict) -> None:
         status = str(event.get("status") or "start")
         if status == "span":
-            self._push_span(event)
             return
         self.llm_status = status
         if event.get("model"):
@@ -360,7 +357,6 @@ class _LiveState:
         label = self._model_label()
         if status == "start":
             self.llm_started_at = self._now()
-            self.llm_spans = []
             self.activity = f"generating via {label}"
         elif status == "skipped":
             self.activity = (
@@ -373,21 +369,6 @@ class _LiveState:
                 "done": f"received report from {label}",
                 "fallback": "LLM failed — skeleton report",
             }.get(status, status)
-
-    def _push_span(self, event: dict) -> None:
-        name = str(event.get("name") or "span")
-        state = str(event.get("state") or "")
-        ms = event.get("ms")
-        if not isinstance(ms, int):
-            ms = None
-        if state == "end":
-            for index in range(len(self.llm_spans) - 1, -1, -1):
-                row = self.llm_spans[index]
-                if row["name"] == name and row.get("ms") is None:
-                    self.llm_spans[index] = {"name": name, "ms": ms}
-                    return
-        self.llm_spans.append({"name": name, "ms": ms if state == "end" else None})
-        self.llm_spans = self.llm_spans[-_SPAN_KEEP:]
 
     def _model_label(self) -> str:
         return _short_model(self.llm_model) if self.llm_model else "LLM"
@@ -451,9 +432,6 @@ class _LiveState:
         body = Text()
         body.append(f"{self._spin()}  thinking\n", style="bold magenta")
         body.append(f"{self._model_label()} · {self._elapsed_s()}s\n", style="cyan")
-        for span in self.llm_spans:
-            duration = f"{span['ms']}ms" if span.get("ms") is not None else "…"
-            body.append(f"{duration}  {span['name']}\n", style="dim")
         body.append("no secrets on the wire", style="dim")
         return Panel(
             Align.center(body),

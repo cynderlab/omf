@@ -1,4 +1,4 @@
-"""Analysis half: redacted fail pack, Pydantic AI narrative, HTML report."""
+"""Analysis half: redacted fail pack, one-shot httpx JSON narrative, HTML report."""
 
 from omf.agent.report import finalize_report, skeleton_body
 

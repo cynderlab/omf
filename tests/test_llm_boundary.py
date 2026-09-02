@@ -1,10 +1,13 @@
+import inspect
 import json
+
 from omf.agent.tools import (
     AnalysisContext,
     fail_pack,
     status_counts,
 )
 from omf.baseline.loader import CheckDef, load_catalog
+from omf.config import LlmSettings
 from omf.redactor import Redactor
 
 
@@ -19,6 +22,32 @@ def _ctx():
         "observed": {"names": ["admin"]},
     })]
     return AnalysisContext(findings, load_catalog(), "mikrotik", "ca"), r
+
+
+def _settings(*, key="sk-test", style="openai", url="http://llm.example.invalid"):
+    return LlmSettings(url, key, "model", style)
+
+
+def _narrative_json(
+    *,
+    check_id: str = "FW-ADM-001",
+    title: str = "Default admin",
+    description: str = "admin remains",
+    summary: str = "one paragraph",
+) -> str:
+    return json.dumps({
+        "executive_summary": summary,
+        "vulnerabilities": [
+            {"check_id": check_id, "title": title, "description": description},
+        ],
+    })
+
+
+def _patch_complete(monkeypatch, fake):
+    from omf.agent import llm as llm_mod
+
+    assert callable(llm_mod._complete)
+    monkeypatch.setattr(llm_mod, "_complete", fake)
 
 
 def test_fail_pack_caps_long_observed_lists():
@@ -48,16 +77,6 @@ def test_fail_pack_caps_long_observed_lists():
     blob = json.dumps(finding)
     assert '"id": "30"' not in blob
     assert "mitigation" not in finding
-
-
-def test_model_for_sets_http_timeout():
-    from omf.agent.llm import _LLM_TIMEOUT, _model_for
-    from omf.config import LlmSettings
-
-    model = _model_for(LlmSettings("http://example.invalid", "sk-test", "m", "openai"))
-    timeout = model._provider._client.timeout
-    assert timeout.connect == _LLM_TIMEOUT.connect
-    assert timeout.read == _LLM_TIMEOUT.read
 
 
 def test_fail_pack_returns_redacted_only():
@@ -157,88 +176,84 @@ def test_no_function_tool_helpers():
     assert not hasattr(tools, "get_mitigation")
 
 
-def _narrative_response(
-    *,
-    check_id: str = "FW-ADM-001",
-    title: str = "Default admin",
-    description: str = "admin remains",
-    summary: str = "one paragraph",
-):
-    from pydantic_ai.messages import ModelResponse, ToolCallPart
+def test_run_analysis_has_no_session_or_token_map_params():
+    from omf.agent.llm import run_analysis
+    import omf.agent.llm as llm_mod
 
-    return ModelResponse(parts=[
-        ToolCallPart("final_result", {
-            "executive_summary": summary,
-            "vulnerabilities": [
-                {"check_id": check_id, "title": title, "description": description},
-            ],
-        })
-    ])
+    names = inspect.signature(run_analysis).parameters
+    assert "session" not in names
+    assert "token_map" not in names
+    assert not hasattr(llm_mod, "build_agent")
 
 
-def test_build_agent_has_no_session_attr():
-    from omf.agent.llm import build_agent
-    from omf.config import LlmSettings
+def test_run_analysis_calls_complete_once(monkeypatch):
+    from omf.agent.llm import run_analysis
+
     ctx, _ = _ctx()
-    settings = LlmSettings("http://example", "sk-test", "model", "openai")
-    agent = build_agent(ctx, settings)
-    assert not hasattr(agent, "session")
-    assert not hasattr(agent, "token_map")
-    tool_names = list(getattr(agent._function_toolset, "tools", {}) or ())
-    assert "list_findings" not in tool_names
-    assert "get_finding" not in tool_names
-    assert "get_redacted_evidence" not in tool_names
-    assert "get_mitigation" not in tool_names
-    assert "submit_report" not in tool_names
+    captured: list[dict] = []
+
+    def fake(settings, system, user):
+        captured.append({"settings": settings, "system": system, "user": user})
+        return _narrative_json()
+
+    _patch_complete(monkeypatch, fake)
+    out = run_analysis(ctx, _settings())
+    assert len(captured) == 1
+    assert captured[0]["settings"].model == "model"
+    assert "Write the audit narrative" in captured[0]["user"]
+    assert "FW-ADM-001" in captured[0]["user"]
+    assert "language code: ca" in captured[0]["system"]
+    assert "one paragraph" in out
+    assert "### FW-ADM-001" in out
 
 
 def test_run_analysis_retries_once(monkeypatch):
-    from omf.agent.llm import build_agent, run_analysis
-    from omf.agent.report import ReportNarrative, VulnNarrative
-    from omf.config import LlmSettings
+    from omf.agent.llm import run_analysis
 
     ctx, _ = _ctx()
-    settings = LlmSettings("http://example", "sk-test", "model", "openai")
     calls = {"n": 0}
-    real_build = build_agent
-    narrative = ReportNarrative(
-        executive_summary="retry ok",
-        vulnerabilities=[
-            VulnNarrative(check_id="FW-ADM-001", title="t", description="d"),
-        ],
-    )
 
-    def wrapped(ctx_arg, settings_arg):
-        agent = real_build(ctx_arg, settings_arg)
+    def fake(settings, system, user):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("transient")
+        return _narrative_json(summary="retry ok")
 
-        def fake_run_sync(*args, **kwargs):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise RuntimeError("transient")
-            return type("Result", (), {"output": narrative})()
-
-        monkeypatch.setattr(agent, "run_sync", fake_run_sync)
-        return agent
-
-    monkeypatch.setattr("omf.agent.llm.build_agent", wrapped)
-    out = run_analysis(ctx, settings)
+    _patch_complete(monkeypatch, fake)
+    out = run_analysis(ctx, _settings())
     assert calls["n"] == 2
     assert "retry ok" in out
     assert "### FW-ADM-001" in out
 
 
+def test_run_analysis_raises_after_retry(monkeypatch):
+    import pytest
+    from omf.agent.llm import run_analysis
+
+    ctx, _ = _ctx()
+    calls = {"n": 0}
+
+    def fake(settings, system, user):
+        calls["n"] += 1
+        raise RuntimeError("down")
+
+    _patch_complete(monkeypatch, fake)
+    with pytest.raises(RuntimeError, match="down"):
+        run_analysis(ctx, _settings())
+    assert calls["n"] == 2
+
+
 def test_run_analysis_refuses_leaking_payload(monkeypatch):
     import pytest
     from omf.agent.llm import LlmPayloadLeak, run_analysis
-    from omf.config import LlmSettings
 
     calls = {"n": 0}
 
-    def capture_model(messages, info):
+    def fake(settings, system, user):
         calls["n"] += 1
         raise AssertionError("model must not be called")
 
-    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: type("M", (), {})())
+    _patch_complete(monkeypatch, fake)
     ctx = AnalysisContext(
         [{
             "check_id": "FW-ADM-001",
@@ -252,27 +267,24 @@ def test_run_analysis_refuses_leaking_payload(monkeypatch):
         "ca",
     )
     with pytest.raises(LlmPayloadLeak, match="10.0.0.5"):
-        run_analysis(ctx, LlmSettings("http://llm.example", "sk-test", "model", "openai"))
+        run_analysis(ctx, _settings())
     assert calls["n"] == 0
 
 
 def test_run_analysis_allows_catalog_policy_tokens(monkeypatch):
-    from pydantic_ai.models.function import FunctionModel
-
     from omf.agent.llm import run_analysis
-    from omf.config import LlmSettings
 
-    captured: list[object] = []
+    captured: list[dict] = []
 
-    def capture_model(messages, info):
-        captured.append(messages)
-        return _narrative_response(
+    def fake(settings, system, user):
+        captured.append({"system": system, "user": user})
+        return _narrative_json(
             check_id="FW-SVC-002",
             title="Listen scope",
             description="management is unrestricted",
         )
 
-    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
+    _patch_complete(monkeypatch, fake)
     ctx = AnalysisContext(
         [
             {
@@ -294,32 +306,25 @@ def test_run_analysis_allows_catalog_policy_tokens(monkeypatch):
         "mikrotik",
         "ca",
     )
-    out = run_analysis(ctx, LlmSettings("http://llm.example", "sk-test", "model", "openai"))
+    out = run_analysis(ctx, _settings())
     assert "### FW-SVC-002" in out
     assert "### FW-LOG-002" in out
-    blob = json.dumps(captured, default=str)
+    blob = json.dumps(captured)
     assert "0.0.0.0/0" in blob
     assert "::/0" in blob
     assert "10.0.0.5" not in blob
 
 
 def test_run_analysis_allows_fortinet_catalog_anycast(monkeypatch):
-    from pydantic_ai.models.function import FunctionModel
-
     from omf.agent.llm import run_analysis
-    from omf.config import LlmSettings
 
-    captured: list[object] = []
+    captured: list[dict] = []
 
-    def capture_model(messages, info):
-        captured.append(messages)
-        return _narrative_response(
-            check_id="FW-DNS-001",
-            title="DNS",
-            description="factory resolvers",
-        )
+    def fake(settings, system, user):
+        captured.append({"user": user})
+        return _narrative_json(check_id="FW-DNS-001", title="DNS", description="factory resolvers")
 
-    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
+    _patch_complete(monkeypatch, fake)
     ctx = AnalysisContext(
         [
             {
@@ -334,9 +339,9 @@ def test_run_analysis_allows_fortinet_catalog_anycast(monkeypatch):
         "fortinet",
         "en",
     )
-    out = run_analysis(ctx, LlmSettings("http://llm.example", "sk-test", "model", "openai"))
+    out = run_analysis(ctx, _settings())
     assert "### FW-DNS-001" in out
-    blob = json.dumps(captured, default=str)
+    blob = json.dumps(captured)
     assert "96.45.45.45" in blob
     assert "96.45.46.46" in blob
 
@@ -344,7 +349,6 @@ def test_run_analysis_allows_fortinet_catalog_anycast(monkeypatch):
 def test_run_analysis_raises_when_not_configured():
     import pytest
     from omf.agent.llm import LlmNotConfigured, run_analysis
-    from omf.config import LlmSettings
 
     ctx, _ = _ctx()
     with pytest.raises(LlmNotConfigured):
@@ -352,10 +356,7 @@ def test_run_analysis_raises_when_not_configured():
 
 
 def test_run_analysis_request_body_excludes_secrets(monkeypatch):
-    from pydantic_ai.models.function import FunctionModel
-
-    from omf.agent.llm import build_agent, run_analysis
-    from omf.config import LlmSettings
+    from omf.agent.llm import run_analysis
 
     firewall_url = "https://192.0.2.8"
     password = "s3cret-password"
@@ -369,39 +370,23 @@ def test_run_analysis_request_body_excludes_secrets(monkeypatch):
         "diagnostic": f"enabled user matches vendor default name 'admin' at {firewall_url}",
         "observed": {"names": ["admin"], "url": firewall_url, "password": password, "api_key": api_key},
     })]
-    evidence = {"users": redactor.redact_obj({
-        "users": [{"name": "admin", "enabled": True, "password": password}],
-    })}
     ctx = AnalysisContext(findings, load_catalog(), "mikrotik", "ca")
     token_map = redactor.token_map()
-    captured: list[object] = []
-    built: dict = {}
+    captured: list[dict] = []
 
-    def capture_model(messages, info):
-        captured.append({"messages": messages, "info": info})
-        return _narrative_response()
+    def fake(settings, system, user):
+        captured.append({"system": system, "user": user})
+        return _narrative_json()
 
-    real_build = build_agent
-
-    def wrapped(ctx_arg, settings):
-        assert ctx_arg is ctx
-        agent = real_build(ctx_arg, settings)
-        built["agent"] = agent
-        return agent
-
-    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
-    monkeypatch.setattr("omf.agent.llm.build_agent", wrapped)
-    out = run_analysis(ctx, LlmSettings("http://llm.example", api_key, "model", "openai"))
+    _patch_complete(monkeypatch, fake)
+    out = run_analysis(ctx, _settings(key=api_key))
     assert "one paragraph" in out
     assert "### FW-ADM-001" in out
     assert len(captured) == 1
-    assert built["agent"] is not None
-    assert not hasattr(built["agent"], "session")
-    assert not hasattr(built["agent"], "token_map")
     assert not hasattr(ctx, "session")
     assert not hasattr(ctx, "token_map")
     assert not hasattr(ctx, "url")
-    blob = json.dumps(captured, default=str)
+    blob = json.dumps(captured)
     assert "FW-ADM-001" in blob
     assert "list_findings" not in blob
     assert "submit_report" not in blob
@@ -414,10 +399,7 @@ def test_run_analysis_request_body_excludes_secrets(monkeypatch):
 
 
 def test_run_analysis_payload_uses_tokens_for_hostname_and_user(monkeypatch):
-    from pydantic_ai.models.function import FunctionModel
-
     from omf.agent.llm import run_analysis
-    from omf.config import LlmSettings
 
     redactor = Redactor()
     redactor.redact_obj({"users": [{"name": "reader"}], "hostname": "home-fw"})
@@ -428,26 +410,18 @@ def test_run_analysis_payload_uses_tokens_for_hostname_and_user(monkeypatch):
         "diagnostic": "users missing inactivity logout/lock ['admin', 'reader']",
         "observed": {"names": ["admin", "reader"], "hostname": "home-fw"},
     }))]
-    evidence = {
-        "users": redactor.apply_known(redactor.redact_obj({
-            "users": [{"name": "admin"}, {"name": "reader"}],
-        })),
-        "admin_settings": redactor.apply_known(redactor.redact_obj({
-            "hostname": "home-fw",
-        })),
-    }
     ctx = AnalysisContext(findings, load_catalog(), "mikrotik", "ca")
-    captured: list[object] = []
+    captured: list[dict] = []
 
-    def capture_model(messages, info):
-        captured.append({"messages": messages, "info": info})
-        return _narrative_response(check_id="FW-ADM-002", title="Idle timeout", description="idle")
+    def fake(settings, system, user):
+        captured.append({"system": system, "user": user})
+        return _narrative_json(check_id="FW-ADM-002", title="Idle timeout", description="idle")
 
-    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
-    out = run_analysis(ctx, LlmSettings("http://llm.example", "sk-test", "model", "openai"))
+    _patch_complete(monkeypatch, fake)
+    out = run_analysis(ctx, _settings())
     assert "### FW-ADM-002" in out
     assert len(captured) == 1
-    blob = json.dumps(captured, default=str)
+    blob = json.dumps(captured)
     assert "home-fw" not in blob
     assert "reader" not in blob
     assert "[HOST_" in blob
@@ -456,27 +430,151 @@ def test_run_analysis_payload_uses_tokens_for_hostname_and_user(monkeypatch):
 
 
 def test_run_analysis_one_request_no_tool_events(monkeypatch):
-    from pydantic_ai.models.function import FunctionModel
-
     from omf.agent.llm import run_analysis
-    from omf.config import LlmSettings
 
     ctx, _ = _ctx()
     events: list[dict] = []
     captured: list[object] = []
 
-    def capture_model(messages, info):
-        captured.append(messages)
-        return _narrative_response()
+    def fake(settings, system, user):
+        captured.append(user)
+        return _narrative_json()
 
-    monkeypatch.setattr("omf.agent.llm._model_for", lambda settings: FunctionModel(capture_model))
-    out = run_analysis(
-        ctx,
-        LlmSettings("http://llm.example", "sk-test", "model", "openai"),
-        on_event=events.append,
-    )
+    _patch_complete(monkeypatch, fake)
+    out = run_analysis(ctx, _settings(), on_event=events.append)
     assert "one paragraph" in out
     assert "### FW-ADM-001" in out
     assert len(captured) == 1
-    assert not any(event.get("status") == "tool" for event in events)
+    assert not any(event.get("status") in {"tool", "span"} for event in events)
     assert all(event.get("phase") == "llm" for event in events)
+
+
+def test_run_analysis_transcript_strips_api_key(monkeypatch):
+    from omf.agent.llm import run_analysis
+
+    ctx, _ = _ctx()
+    api_key = "sk-live-secret-key"
+
+    def fake(settings, system, user):
+        return _narrative_json(summary=f"used {api_key}")
+
+    _patch_complete(monkeypatch, fake)
+    run_analysis(ctx, _settings(key=api_key))
+    assert api_key not in ctx.transcript
+    assert "[STRIPPED]" in ctx.transcript
+    assert "Write the audit narrative" in ctx.transcript
+    assert "Every fail in the pack" in ctx.transcript
+    assert "Authorization" not in ctx.transcript
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeClient:
+    def __init__(self, *args, **kwargs) -> None:
+        self.args = args
+        self.kwargs = kwargs
+        self.posts: list[dict] = []
+        self.response_payload: dict = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        return None
+
+    def post(self, url, *, headers=None, json=None):
+        self.posts.append({"url": url, "headers": headers, "json": json})
+        return _FakeResponse(self.response_payload)
+
+
+def _install_client(monkeypatch, payload: dict) -> _FakeClient:
+    client = _FakeClient()
+    client.response_payload = payload
+
+    def factory(*args, **kwargs):
+        client.args = args
+        client.kwargs = kwargs
+        return client
+
+    monkeypatch.setattr("omf.agent.llm.httpx.Client", factory)
+    return client
+
+
+def test_complete_openai_appends_chat_completions(monkeypatch):
+    from omf.agent.llm import _LLM_TIMEOUT, _complete
+
+    body = _narrative_json()
+    client = _install_client(monkeypatch, {
+        "choices": [{"message": {"content": body}}],
+    })
+    out = _complete(_settings(url="http://llm.example.invalid/v1"), "sys", "user")
+    assert out == body
+    assert client.posts[0]["url"] == "http://llm.example.invalid/v1/chat/completions"
+    assert client.posts[0]["headers"]["Authorization"] == "Bearer sk-test"
+    assert client.posts[0]["json"]["response_format"] == {"type": "json_object"}
+    assert client.posts[0]["json"]["messages"][0] == {"role": "system", "content": "sys"}
+    assert client.kwargs["timeout"] is _LLM_TIMEOUT
+    assert client.kwargs["trust_env"] is False
+
+
+def test_complete_openai_does_not_double_append(monkeypatch):
+    from omf.agent.llm import _complete
+
+    body = _narrative_json()
+    client = _install_client(monkeypatch, {
+        "choices": [{"message": {"content": body}}],
+    })
+    _complete(
+        _settings(url="http://llm.example.invalid/chat/completions"),
+        "sys",
+        "user",
+    )
+    assert client.posts[0]["url"] == "http://llm.example.invalid/chat/completions"
+
+
+def test_complete_anthropic_appends_v1_messages(monkeypatch):
+    from omf.agent.llm import _complete
+
+    body = _narrative_json()
+    client = _install_client(monkeypatch, {
+        "content": [{"text": body}],
+    })
+    out = _complete(
+        _settings(style="anthropic", url="http://llm.example.invalid"),
+        "sys",
+        "user",
+    )
+    assert out == body
+    assert client.posts[0]["url"] == "http://llm.example.invalid/v1/messages"
+    headers = client.posts[0]["headers"]
+    assert headers["x-api-key"] == "sk-test"
+    assert headers["anthropic-version"] == "2023-06-01"
+    assert "Authorization" not in headers
+    payload = client.posts[0]["json"]
+    assert payload["max_tokens"] == 8192
+    assert payload["system"] == "sys"
+    assert payload["messages"] == [{"role": "user", "content": "user"}]
+
+
+def test_complete_anthropic_does_not_double_append(monkeypatch):
+    from omf.agent.llm import _complete
+
+    body = _narrative_json()
+    client = _install_client(monkeypatch, {
+        "content": [{"text": body}],
+    })
+    _complete(
+        _settings(style="anthropic", url="http://llm.example.invalid/v1/messages/"),
+        "sys",
+        "user",
+    )
+    assert client.posts[0]["url"] == "http://llm.example.invalid/v1/messages"
