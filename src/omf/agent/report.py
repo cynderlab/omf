@@ -342,18 +342,19 @@ def narrative_body(
     return "\n".join(parts) + "\n"
 
 
-def wrap_report(
+def finalize_report(
     body: str,
+    redactor: Redactor,
     *,
+    findings: Sequence[CheckResult],
     vendor: str,
     url: str,
     started_at: datetime,
     version: str,
     language: str,
-    findings: Sequence[CheckResult] = (),
 ) -> str:
     return render_html_report(
-        body,
+        redactor.destokenize(body),
         findings=findings,
         vendor=vendor,
         url=url,
@@ -361,13 +362,3 @@ def wrap_report(
         version=version,
         language=language,
     )
-
-
-def finalize_report(
-    body: str,
-    redactor: Redactor,
-    *,
-    findings: Sequence[CheckResult],
-    **wrap_kwargs,
-) -> str:
-    return wrap_report(redactor.destokenize(body), findings=findings, **wrap_kwargs)

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from omf.agent.html import render_html_report
 from omf.agent.llm import _prompt_for
 from omf.agent.report import (
     ReportNarrative,
@@ -7,7 +8,6 @@ from omf.agent.report import (
     finalize_report,
     narrative_body,
     skeleton_body,
-    wrap_report,
 )
 from omf.schema.evidence import CheckResult
 from omf.baseline.loader import CheckDef, load_catalog
@@ -44,7 +44,7 @@ def _findings():
 
 
 def test_wrap_inserts_localized_header_with_author_date_target():
-    html = wrap_report(
+    html = render_html_report(
         "BODY",
         vendor="mikrotik",
         url="https://192.0.2.1",
@@ -67,7 +67,7 @@ def test_wrap_inserts_localized_header_with_author_date_target():
 
 
 def test_wrap_english_title():
-    html = wrap_report(
+    html = render_html_report(
         "BODY",
         vendor="fortinet",
         url="https://fw",

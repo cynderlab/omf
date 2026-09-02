@@ -221,8 +221,8 @@ def test_markdown_fence_escapes_script():
 
 from datetime import datetime, timezone
 
-from omf.agent.html import operator_username
-from omf.agent.report import wrap_report, finalize_report
+from omf.agent.html import operator_username, render_html_report
+from omf.agent.report import finalize_report
 from omf.redactor import Redactor
 
 _DISCLAIMER = (
@@ -240,7 +240,7 @@ def _wrap(body="## Executive summary\n\nLLM says zero problems.\n", **kwargs):
             _finding("FW-NTP-001", "error", "medium"),
         ],
     )
-    return wrap_report(
+    return render_html_report(
         body,
         vendor=kwargs.pop("vendor", "mikrotik"),
         url=kwargs.pop("url", "https://192.0.2.1"),
@@ -379,7 +379,7 @@ def test_wrap_html_table_headers_and_overflow_css(monkeypatch):
 
 
 def test_wrap_html_catalan_kpi_labels():
-    html = wrap_report(
+    html = render_html_report(
         "## Resum executiu\n\n",
         vendor="fortinet",
         url="https://fw",
@@ -396,7 +396,7 @@ def test_wrap_html_catalan_kpi_labels():
 
 
 def test_wrap_html_renders_fenced_code_and_includes_pre_css():
-    html = wrap_report(
+    html = render_html_report(
         "## Executive summary\n\n```\nset foo\n```\n",
         vendor="mikrotik",
         url="https://192.0.2.1",
