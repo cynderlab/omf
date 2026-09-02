@@ -1,0 +1,4 @@
+# Keep markdown plans; ignore local scratch
+*
+!.gitignore
+!*.md
