@@ -30,6 +30,7 @@ from omf.connect import (
 )
 from omf.log import get_logger
 from omf.menus import (
+    COMING_SOON_VENDORS,
     LANGUAGE_OPTIONS,
     REPORT_MODE_OPTIONS,
     VENDOR_OPTIONS,
@@ -172,7 +173,12 @@ def _prompt_report_mode(
 def _prompt_session(
     console: Console, prefs: UserPrefs, *, llm_configured: bool
 ) -> Session:
-    vendor = select_value("Vendor", VENDOR_OPTIONS, prefs.last_vendor)
+    vendor = select_value(
+        "Vendor",
+        VENDOR_OPTIONS,
+        prefs.last_vendor,
+        disabled_labels=COMING_SOON_VENDORS,
+    )
     spec = vendor_spec(vendor)
     if spec.hint:
         console.print(f"[dim]{spec.hint}[/dim]")

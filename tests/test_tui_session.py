@@ -3,6 +3,7 @@ from pathlib import Path
 from rich.console import Console
 
 from omf.config import UserPrefs
+from omf.menus import COMING_SOON_VENDORS, VENDOR_OPTIONS
 from omf.tui import (
     _LiveState,
     _print_results,
@@ -10,6 +11,40 @@ from omf.tui import (
     _prompt_session,
     _severity_cell,
 )
+
+
+def test_prompt_session_vendor_menu_disables_coming_soon(monkeypatch):
+    seen: dict = {}
+
+    def fake_select(label, options, default=None, **kwargs):
+        if label == "Vendor":
+            seen["options"] = options
+            seen["disabled_labels"] = kwargs.get("disabled_labels")
+            return "fortinet"
+        if label == "Authentication":
+            return "token"
+        if label == "Report":
+            return "eval"
+        raise AssertionError(f"unexpected select: {label}")
+
+    monkeypatch.setattr("omf.tui.select_value", fake_select)
+    monkeypatch.setattr(
+        "omf.tui._ask_reachable_url",
+        lambda console, default, label="Device URL": "https://192.0.2.1",
+    )
+    monkeypatch.setattr(
+        "omf.tui._prompt_credentials",
+        lambda *args, **kwargs: {"username": "admin", "password": "x", "token": ""},
+    )
+    prefs = UserPrefs(True, 1, "en", None, None, None)
+    session = _prompt_session(
+        Console(quiet=True), prefs, llm_configured=False
+    )
+    assert session.vendor == "fortinet"
+    assert session.report_mode == "eval"
+    assert seen["options"] == VENDOR_OPTIONS
+    assert seen["options"][0][1] == "fortinet"
+    assert seen["disabled_labels"] == COMING_SOON_VENDORS
 
 
 def test_prompt_session_does_not_ask_tls_and_defaults_off(monkeypatch):
