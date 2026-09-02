@@ -19,10 +19,9 @@ from rich.text import Text
 from omf import DISCLAIMER_TEXT, DISCLAIMER_VERSION
 from omf.adapters.auth import AuthScheme, auth_schemes, scheme_by_id
 from omf.adapters.base import ProbeError, VendorAdapter
-from omf.adapters.factory import build_adapter
 from omf.banner import print_banner
 from omf.baseline.loader import checks_for, load_catalog
-from omf.vendors import get as vendor_spec, ids as vendor_ids
+from omf.vendors import build_adapter, get as vendor_spec, ids as vendor_ids
 from omf.connect import (
     CONNECT_ACTIONS,
     URL_REACH_ACTIONS,

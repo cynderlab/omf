@@ -67,7 +67,7 @@ LLM missing, failed, or skipped: collect + evaluate + skeleton still run. Do not
 | `agent/` | Narrative Markdown from redacted tools | Collect or connect |
 | `store.py` | `./audits/YYYY-MM-DDTHHMMSS-{vendor}/` layout | Interpret findings |
 
-`adapters/factory.py` re-exports `vendors.build_adapter`. The HTTP client for URL packs is created **there** (15s connect, 30s read, `verify=session.verify_tls`). The runner never receives a client or a password.
+The HTTP client for URL packs is created in `vendors.build_adapter` (15s connect, 30s read, `verify=session.verify_tls`). The runner never receives a client or a password.
 
 TLS policy is **pack-owned** (`VendorSpec.tls_verify`). Firewall packs: verify off, TUI does not ask, dim notice. SaaS packs must verify. `Session.verify_tls` stays so tests can still set it.
 

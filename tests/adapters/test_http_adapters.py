@@ -5,7 +5,7 @@ from omf.session import Session
 from omf.adapters.mikrotik import MikrotikAdapter
 from omf.adapters.fortinet import FortinetAdapter
 from omf.adapters.base import ProbeError, CollectError
-from omf.adapters.factory import build_adapter
+from omf.vendors import build_adapter
 from omf.schema.capabilities import CORE_CAPABILITIES, FORTINET_EXTRAS, MIKROTIK_EXTRAS
 
 MT = Path(__file__).parent / "fixtures" / "mikrotik"
