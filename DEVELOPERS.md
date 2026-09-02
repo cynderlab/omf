@@ -103,8 +103,18 @@ Preferred. Cheapest. No adapter change if the capability already exists.
 
 1. Entry in `src/omf/baseline/vendors/<vendor>/catalog.yaml`:
 
-   - `id`, `title`, `severity`, `needs`, `evaluator`, `params`, `description`, `mitigation`.
-   - `title` is a neutral topic (`Administrative HTTP/HTTPS ports`), never a pass/fail assertion. `description` is English control rationale, not a pass/fail assertion. Status and `diagnostic` carry the judgement. Fortinet description/mitigation text is paraphrased from CIS FortiGate 7.4.x Benchmark v1.0.1 Level 1; it is not CIS-CAT output. MikroTik description/mitigation text is RouterOS 7 plus the evaluators, not CIS.
+   | Key | Role |
+   |---|---|
+   | `id` | Stable identifier (ours, not CIS). Findings, report, tests. |
+   | `title` | Neutral topic (`Administrative HTTP/HTTPS ports`). Never a pass/fail assertion. |
+   | `severity` | `high` / `medium` / `low`. Catalog sets it; the evaluator does not pick it. |
+   | `needs` | Capability names the runner collects once. Missing or unimplemented → SKIPPED. |
+   | `evaluator` | Name in `REGISTRY` of the pure function. |
+   | `params` | Optional. Check knobs; `resolve_params` merges with `profile.yaml` (check wins). |
+   | `description` | English control rationale for the report / LLM. Not a pass/fail assertion. Status and `diagnostic` carry the judgement. |
+   | `mitigation` | Example remediation. The LLM may rephrase; it must not invent CLI/API beyond this text. |
+
+   Fortinet description/mitigation text is paraphrased from CIS FortiGate 7.4.x Benchmark v1.0.1 Level 1; it is not CIS-CAT output. MikroTik description/mitigation text is RouterOS 7 plus the evaluators, not CIS.
 
 2. If the evaluator is new: pure function in `src/omf/baseline/evaluators/`, register the name in `REGISTRY` in `evaluators/__init__.py`. Signature: `(evidence_map, params, vendor) -> CheckResult`. No HTTP, adapters, env, or secrets. Reuse an existing function when the payload type already matches.
 
