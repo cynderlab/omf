@@ -39,7 +39,7 @@ You need [uv](https://docs.astral.sh/uv/) and Python 3.12+.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone <this-repo> omf
+git clone git@github.com:cynderlab/omf.git omf
 cd omf
 ./omf install
 ./omf doctor    # optional; never talks to a target
